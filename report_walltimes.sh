@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# scripts/report_walltimes.sh
+# report_walltimes.sh
 #
 # Most TIME[]/CP_TIME[] values in config/varsets.sh are estimates carried
 # over from the original per-variable scripts, not measured against the
@@ -13,13 +13,13 @@
 # instead of guesswork. It only reports; it never edits config/varsets.sh.
 #
 # Usage:
-#   scripts/report_walltimes.sh [--since <sacct -S value, default: -30days>] [--margin <percent, default: 25>]
+#   bash report_walltimes.sh [--since <sacct -S value, default: now-30days>] [--margin <percent, default: 25>]
 #
 # Requires: sacct (run this on the HPC login node, not in CI/locally).
 
 set -euo pipefail
 
-since="-30days"
+since="now-30days"
 margin=25
 
 while [ $# -gt 0 ]; do
