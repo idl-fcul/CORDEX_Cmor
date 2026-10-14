@@ -6,7 +6,7 @@
 # env.site.sh. Loads experiments/${EXPERIMENT}/${EXPERIMENT}.sh and checks
 # that every grid in run[] has all its per-grid settings and its two ini
 # files, so a missing entry fails at the start of the job instead of
-# half-way through. Also sets HEADER_INI_DIR to the experiment's folder,
+# half-way through. Also sets EXPERIMENT_DIR, the experiment's folder,
 # where its ini files live.
 #
 # The experiment is chosen when a run is first submitted (EXPERIMENT in
@@ -28,11 +28,6 @@ if [ ! -f "${EXPERIMENT_FILE}" ]; then
   echo "Available: ${_avail[*]##*/}" >&2
   exit 1
 fi
-
-# The experiment's ini files live next to its .sh file (this replaces any
-# HEADER_INI_DIR an older env.site.sh may set).
-# shellcheck disable=SC2034  # used by run_out_generic.sh
-HEADER_INI_DIR="${EXPERIMENT_DIR}"
 
 # Drop any per-experiment settings an older env.site.sh may still define,
 # so only the experiment file's values are used.
