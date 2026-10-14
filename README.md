@@ -9,10 +9,118 @@ to ECFS and a remote server.
 
 This used to be two dozen near-duplicate submission scripts, one per
 variable group, each with its own hardcoded paths and variable list. It's
-now 3 generic scripts driven by one small config file
-(`config/varsets.sh`) plus one site-specific settings file
-(`env.site.sh`) — everything below walks through the full setup, start to
-finish.
+now 3 generic job scripts, submitted through `submit.sh` and driven by:
+
+- **`env.site.sh`** — your site settings (Slurm, compiler, modules; §4);
+- **`experiments/<name>/`** — one folder per experiment: its grids, paths
+  and ini files (§2);
+- **`config/varsets.sh`** — the variable sets, time limits and chaining (§5).
+
+§0 is the quick start; §1–§11 go through each part in detail.
+
+## 0. Job Submission Instructions
+
+### First-time setup checklist
+
+1. Check out this repo somewhere permanent — that's `ROOT_DIR` (found
+   automatically by `submit.sh`, nothing to export; §9).
+2. Fill in your experiment's folder in `experiments/` — its `.sh` file
+   and ini files (§2) — and confirm `header/` (§3).
+3. `cp env.site.sh.example env.site.sh` and fill it in (§4): at least
+   `JOB_ACCOUNT`, `JOB_MAIL_USER`, `JOB_CHDIR`, and `EXPERIMENT` set to
+   your experiment folder's name. Nothing to edit in `scripts/`.
+4. Check `config/varsets.sh` covers the variables you need (§5), and run
+   `bash lint_varsets.sh` (§11) after any change to it.
+
+### Standard submission
+
+`run_analysis.sh` is the main controller — it submits every varset in
+`ORDER` (`config/varsets.sh`), each of which manages its own dependencies
+via `NEXT[]`, submitting some archival/follow-up tasks as soon as its own
+processing finishes. `year_lim` is the last year to process: each stream
+stops after it (§8).
+
+```bash
+cd $SCRATCH/Analysis   # anywhere with a symlink to submit.sh (§9), or call it by its path
+
+# Syntax
+./submit.sh run_analysis.sh <datebeg> <dateend> <year_lim>
+
+# Example: process 2001, then keep chaining year by year until 2005
+./submit.sh run_analysis.sh 20010101 20011231 2005
+```
+
+Always submit through `submit.sh` (not plain `sbatch`): it's what applies
+the `env.site.sh` job settings (§6).
+
+### Extracting a single variable/varset
+
+Check `config/varsets.sh` to find which varset covers your variable, then
+submit it directly:
+
+```bash
+# soil for 1990 only
+./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
+       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
+       run_out_generic.sh 19900101 19901231 1990 soil
+```
+
+With the normal `config/varsets.sh`, most varsets hand over to the next
+varset of their stream when they finish (soil → out2, …), so do this with
+`config/varsets_single.sh` in place (see the next section). There, a
+varset only resubmits itself, and setting `year_lim` to the same year
+makes it stop after that year. `fx` has no `NEXT[]` entry in either file,
+so it never chains.
+
+### Extracting several years of one varset
+
+**Take care with `NEXT[]`.** With the normal `config/varsets.sh`, a
+finished job hands over to the next varset in its stream (`NEXT[]`, §8),
+so submitting one varset on its own starts the other varsets of its
+stream too, year by year until `year_lim`.
+
+To run varsets on their own, use **`config/varsets_single.sh`**. It has
+the same varsets, time limits and memory, but every varset loops on
+itself, like `zlev_uava0` and `zlev_uava1` do: it processes one year,
+submits its archive (`cp-*`) job, and resubmits itself for the next year,
+stopping after `year_lim`.
+
+The scripts only read `config/varsets.sh`, so you switch by copying a
+layout over it. `config/` holds both:
+
+* `varsets_chain.sh` — the normal chained streams (§8), a saved copy of
+  what `varsets.sh` holds by default;
+* `varsets_single.sh` — every varset loops on itself.
+
+```bash
+cd $ROOT_DIR    # the repo
+cp config/varsets_single.sh config/varsets.sh   # every varset loops on itself
+```
+
+and to go back to the normal streams:
+
+```bash
+cp config/varsets_chain.sh config/varsets.sh
+```
+
+Every job reads `config/varsets.sh` when it **starts**, so only switch when
+no chained jobs are queued or running — otherwise those jobs pick up the
+new `NEXT[]` at their next link.
+
+Then submit the varset for its first year, with the last year as
+`year_lim`:
+
+```bash
+# soil, 2001 to 2005, one year per job
+./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
+       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
+       run_out_generic.sh 20010101 20011231 2005 soil
+```
+
+`run_analysis.sh` works with `varsets_single.sh` too, but its `ORDER` is
+empty by default: each entry starts its own loop and they all run at
+once, so uncomment one of the two batches in the file (10 varsets each,
+within the 11-processor limit), or list only the varsets you need.
 
 ## 1. Directory Setup
 
@@ -22,11 +130,15 @@ the provided folder structure:
 ```
 f90_src/       <- Fortran source (RCM_sfc_*.f90, RCM_plev_*.f90, RCM_zlev_*.f90, ...)
 header/        <- per-variable namelist headers
-config/        <- varsets.sh: the active variables/programs/scheduling, the only one the scripts read (see config/README.md);
-                  varsets_chain.sh: saved copy of the chained streams (§8); varsets_single.sh: every varset loops on itself (§10)
 experiments/   <- one folder per experiment: <name>.sh (grids, paths) + its ini files (§2, experiments/README.md)
-scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they source)
-env.site.sh.example, LICENSE, README.md, MIGRATION.md
+config/        <- varsets.sh: the active variables/programs/scheduling, the only one the scripts read (§5, config/README.md);
+                  varsets_chain.sh: saved copy of the chained streams (§8); varsets_single.sh: every varset loops on itself (§0)
+scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they source; §6)
+.github/       <- ShellCheck run on GitHub
+submit.sh      <- submits every job (§6, §9)
+report_walltimes.sh, lint_varsets.sh  <- helper scripts (§11)
+env.site.sh.example  <- copy to env.site.sh and fill in (§4)
+LICENSE, README.md
 ```
 
 This root directory is referred to as `ROOT_DIR` everywhere below — see
@@ -173,8 +285,8 @@ long to schedule it for, and how it chains to other varsets. You will
 rarely need to touch anything else once this is set up.
 
 **[`config/README.md`](config/README.md) covers this file in full**,
-including how to turn off the legacy self-resubmission chaining if you
-just want one-shot runs, and how to cut it down to only the variables you
+including the current stream layout, the basis of every time limit, how
+to turn chaining off, and how to cut it down to only the variables you
 need. Variable names follow the
 [CORDEX-CMIP6 data request](https://github.com/WCRP-CORDEX/data-request-table),
 and the Fortran programs referenced in each entry correspond to
@@ -191,7 +303,7 @@ program pattern:
 [out1]="RCM_sfc_VAR:tas,ts,th,..."                # RCM_sfc_tas.f90, RCM_sfc_ts.f90, ...
 [cloud1]="RCM_sfc_cloud:clh,clm"                  # always RCM_sfc_cloud.f90
 [plev_ta]="RCM_plev_ta:ta1000,ta925,...,ta30"      # always RCM_plev_ta.f90, all 16 levels
-[zlev_uava0]="RCM_zlev_uava:va50m,va150m,va100m"   # always RCM_zlev_uava.f90
+[zlev_uava0]="RCM_zlev_uava:va50m,va100m,va150m"   # always RCM_zlev_uava.f90
 ```
 
 `VAR` in a program pattern gets substituted with the current variable; a
@@ -212,36 +324,39 @@ The one name that matters: the varset that runs `RCM_sfc_xtrm` must be
 called **`wxtrm`** (or `testex`) — `run_out_generic.sh` reads the
 `wrfxtrm` files instead of `wrfout` only for those names.
 
-`plev_uava` and `zlev_uava0`/`zlev_uava1` process `ua`and `va` variables through a
-program literally named `RCM_plev_uava` / `RCM_zlev_uava` — that's how the
-source names those programs, not a bug in this config.
+`plev_uava` and `zlev_uava0`/`zlev_uava1` list only `va*` variables, but
+their programs (`RCM_plev_uava` / `RCM_zlev_uava`) write both `ua` and `va`
+— see §7 for how the `ua` files are archived.
 
-To extract the fixed variables `VAR`is set to `fx`
-`run_out_fx.sh` (`orog`, `sftlaf`, `sftlf`, `sfturf`, `sftgif` →
-`RCM_fx_<var>`) 
-`[fx]="RCM_fx_VAR:orog,sftlaf,sftlf,sfturf,sftgif"`It is not called in Analysis since
-is independent of time. Call as a single `VARSET` see §10 (Extracting a single variable/varset). 
+The fixed (time-independent) fields are the **`fx`** varset,
+`[fx]="RCM_fx_VAR:orog,sftlaf,sftlf,sfturf,sftgif"` (one `RCM_fx_<var>`
+program each). It isn't in `ORDER` or any stream: submit it once on its
+own, as in §0 "Extracting a single variable/varset".
 
 ### Scheduling and chaining
 
 Alongside `VARSETS[]`, the same file holds:
 
 * **`TIME[]`** — walltime to request for each varset's processing job.
+* **`MEM[]`** / **`DEFAULT_MEM`** — memory for each varset's processing
+  job (8G unless listed).
 * **`CP_TIME[]`** / **`DEFAULT_CP_TIME`** — walltime for each varset's
   archive job.
 * **`ORDER`** — the varsets `run_analysis.sh` submits directly (see
-  [§10](#10-job-submission-instructions)).
+  [§0](#0-job-submission-instructions)).
 * **`NEXT[]`** and **`ADVANCE_YEAR[]`** — see
   [§8, Chaining behaviour](#8-chaining-behaviour).
 * **`CP_EXTRA[]`** — see [§7, Archiving](#7-archiving).
 
-See [§11, Adding/changing a variable set](#11-addingchanging-a-variable-set)
+See [§10, Adding/changing a variable set](#10-addingchanging-a-variable-set)
 for how to extend this file.
 
 ## 6. Submission Scripts (`scripts` folder)
 
-Only 3 scripts now, each replacing what used to be a whole family of
-per-variable files:
+Only 3 job scripts now, each replacing what used to be a whole family of
+per-variable files. Every job is submitted through `submit.sh` (in the repo
+root), and the two job scripts that need the experiment load it with
+`scripts/load_experiment.sh`.
 
 | Script | Replaces | Role |
 |---|---|---|
@@ -257,7 +372,7 @@ can't load them from a file itself; instead every job is submitted through
 `submit.sh`, which reads these values from `env.site.sh` and passes them
 on the `sbatch` command line. That includes the jobs the scripts submit
 for each other, so **submit your first job through `submit.sh` too**
-(§10) — a job started with plain `sbatch` won't get these settings.
+(§0) — a job started with plain `sbatch` won't get these settings.
 Per-job settings (`--job-name`, `--time`, `--mem`, `--output`) come from
 `config/varsets.sh`.
 
@@ -303,13 +418,14 @@ list, and archives each `<var>_*.nc` to ECFS and a remote server. There's
 nothing varset-specific to write — adding a new varset to
 `config/varsets.sh` automatically gets archiving for free.
 
-`plev_uava`, `zlev_uava0`, and `zlev_uava1`  *process* the u and v-components 
-so their archive step needs two calls, not one. `CP_EXTRA[]` in `config/varsets.sh`
- names the "u" companion varset to also archive (`plev_ua`, `zlev_ua0`, `zlev_ua1` respectively —
-reactivated from the deprecated block purely for this, since they're not
-used for processing and aren't in `ORDER`/`NEXT`/`TIME`). When
-`CP_EXTRA[$VARSET]` is set, `run_out_generic.sh` submits a second
-`run_cp_generic.sh` job for that companion.
+`plev_uava`, `zlev_uava0` and `zlev_uava1` list only their `va*`
+variables, but their programs also write the matching `ua*` files, so
+their archive step needs two jobs. `CP_EXTRA[]` in `config/varsets.sh`
+names the companion varset that lists the `ua*` variables (`plev_ua`,
+`zlev_ua0`, `zlev_ua1` respectively). Those are archive-only entries:
+never processed, not in `ORDER` or `NEXT[]`. When `CP_EXTRA[$VARSET]` is
+set, `run_out_generic.sh` submits a second `run_cp_generic.sh` job for
+that companion.
 
 The archive step's modules and remote host (which differ from the
 compile/run environment) live in `env.site.sh`: `CP_MODULES`,
@@ -377,118 +493,11 @@ This is completely independent of:
 - **`OUTPUT_DIR[]`** (experiment file) — where each grid's finished output
   files land before archiving (e.g. `$SCRATCH/ssp370/output`)
 
-## 10. Job Submission Instructions
-
-### First-time setup checklist
-
-1. Check out this repo somewhere permanent — that's `ROOT_DIR` (found
-   automatically by `submit.sh`, nothing to export).
-2. Fill in your experiment's folder in `experiments/` — its `.sh` file
-   and ini files (§2) — and confirm `header/` (§3).
-3. `cp env.site.sh.example env.site.sh` and fill it in, setting
-   `EXPERIMENT` to that folder's name (§4).
-4. Check `config/varsets.sh` covers the variables you need (§5) —
-   `MIGRATION.md` maps old script names to varsets if you're coming from
-   the previous per-variable-script layout.
-5. In `env.site.sh`, fill in `JOB_ACCOUNT`, `JOB_MAIL_USER` and
-   `JOB_CHDIR` (§4, §6) — nothing to edit in `scripts/`.
-
-### Standard submission
-
-`run_analysis.sh` is the main controller — it submits every varset in
-`ORDER` (`config/varsets.sh`), each of which manages its own dependencies
-via `NEXT[]`, submitting some archival/follow-up tasks as soon as its own
-processing finishes. `year_lim` is a failsafe: it stops each chain's
-self-resubmission at a specific year so a stuck loop doesn't run forever.
-
-```bash
-cd $SCRATCH/Analysis   # or wherever you want to submit from — doesn't have to be ROOT_DIR
-
-# Syntax
-./submit.sh run_analysis.sh <datebeg> <dateend> <year_lim>
-
-# Example: process 2001, then keep chaining year by year until 2005
-./submit.sh run_analysis.sh 20010101 20011231 2005
-```
-
-Always submit through `submit.sh` (not plain `sbatch`): it's what applies
-the `env.site.sh` job settings (§6).
-
-### Extracting a single variable/varset
-
-Check `config/varsets.sh` (or `MIGRATION.md` if you're looking for where an
-old `run_out_<x>.sh` script went) to find which varset covers your
-variable, then submit it directly:
-
-```bash
-# soil for 1990 only
-./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
-       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 19900101 19901231 1990 soil
-```
-
-With the normal `config/varsets.sh`, most varsets hand over to the next
-varset of their stream when they finish (soil → out2, …), so do this with
-`config/varsets_single.sh` in place (see the next section). There, a
-varset only resubmits itself, and setting `year_lim` to the same year
-makes it stop after that year. `fx` has no `NEXT[]` entry in either file,
-so it never chains.
-
-### Extracting several years of one varset
-
-**Take care with `NEXT[]`.** With the normal `config/varsets.sh`, a
-finished job hands over to the next varset in its stream (`NEXT[]`, §8),
-so submitting one varset on its own starts the other varsets of its
-stream too, year by year until `year_lim`.
-
-To run varsets on their own, use **`config/varsets_single.sh`**. It has
-the same varsets, time limits and memory, but every varset loops on
-itself, like `zlev_uava0` and `zlev_uava1` do: it processes one year,
-submits its archive (`cp-*`) job, and resubmits itself for the next year,
-stopping after `year_lim`.
-
-The scripts only read `config/varsets.sh`, so you switch by copying a
-layout over it. `config/` holds both:
-
-* `varsets_chain.sh` — the normal chained streams (§8), a saved copy of
-  what `varsets.sh` holds by default;
-* `varsets_single.sh` — every varset loops on itself.
-
-```bash
-cd $ROOT_DIR    # the repo
-cp config/varsets_single.sh config/varsets.sh   # every varset loops on itself
-```
-
-and to go back to the normal streams:
-
-```bash
-cp config/varsets_chain.sh config/varsets.sh
-```
-
-Every job reads `config/varsets.sh` when it **starts**, so only switch when
-no chained jobs are queued or running — otherwise those jobs pick up the
-new `NEXT[]` at their next link.
-
-Then submit the varset for its first year, with the last year as
-`year_lim`:
-
-```bash
-# soil, 2001 to 2005, one year per job
-./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
-       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 20010101 20011231 2005 soil
-```
-
-`run_analysis.sh` works with `varsets_single.sh` too, but its `ORDER` is
-empty by default: each entry starts its own loop and they all run at
-once, so uncomment one of the two batches in the file (10 varsets each,
-within the 11-processor limit), or list only the varsets you need.
-
-## 11. Adding/changing a variable set
+## 10. Adding/changing a variable set
 
 Edit `config/varsets.sh` — and make the same change in
 `config/varsets_chain.sh` and `config/varsets_single.sh`, so switching
-layouts (§10) doesn't lose it:
+layouts (§0) doesn't lose it:
 
 ```bash
 declare -A VARSETS=(
@@ -508,7 +517,7 @@ to `NEXT[]` if some varset should chain into (or from) it, and to
 If its jobs need more than the default 8G of memory, add a `MEM[]` entry
 (e.g. `[my_new_set]="16G"`); otherwise it uses `DEFAULT_MEM`.
 
-## 12. Helper scripts
+## 11. Helper scripts
 
 ### `report_walltimes.sh` — longest run per varset
 

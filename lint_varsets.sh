@@ -2,7 +2,7 @@
 #
 # lint_varsets.sh — consistency check of config/varsets.sh (no Slurm needed).
 # Usage: bash lint_varsets.sh    (exit 1 if any error)
-# See README.md §12.
+# See README.md §11.
 #----------------------------------------------------------------
 
 set -uo pipefail
