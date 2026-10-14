@@ -51,8 +51,8 @@ multi-group entry.
    the year first if `ADVANCE_YEAR[<varset>]=1`.
 
 Step 3 is what's referred to below as the "legacy loop": it reproduces the
-original per-script self/pair-resubmission behaviour (`out↔soil`,
-`rad↔snw`, self-loops like `plev_uava`, etc. — see the main README §8).
+per-stream resubmission (`rad→out1→rad`, self-loops like `zlev_uava0`,
+etc. — see the main README §8).
 Steps 1–2 happen regardless of `NEXT[]`/`ADVANCE_YEAR[]`.
 
 ## I don't want the legacy self-resubmission loops
@@ -81,20 +81,20 @@ Two ways to get there, depending on whether you want the existing
 scheduling/chaining or not:
 
 - **Trim an existing varset:** just remove variables from its comma list
-  in `VARSETS[]`, e.g. shrink `[out]="RCM_sfc_VAR:tas,ts,th,..."` down to
+  in `VARSETS[]`, e.g. shrink `[out1]="RCM_sfc_VAR:tas,ts,th,..."` down to
   the ones you need. Everything else (`TIME`, `NEXT`, `CP_TIME`, `ORDER`
   membership) keeps working unchanged.
 - **Add a new, smaller varset:** give it its own entry, e.g.
   `[my_few]="RCM_sfc_VAR:tas,pr"`, plus a `TIME[my_few]` entry (required —
-  it's read either by your own manual `sbatch --time=...` or, if something
+  it's read either by your own manual `submit.sh --time=...` or, if something
   chains into it, by the resubmitting script via `TIME[$next]`). You do
   **not** need to add it to `ORDER` or `NEXT[]` if you're only ever going
   to submit it manually:
 
   ```bash
-  sbatch --job-name=wrf-my_few --time=04:00:00 --mem=8G \
+  $ROOT_DIR/submit.sh --job-name=wrf-my_few --time=04:00:00 --mem=8G \
          --output=wrf-my_few.%j.out --error=wrf-my_few.%j.out \
-         $ROOT_DIR/scripts/run_out_generic.sh 19900101 19901231 2000 my_few
+         run_out_generic.sh 19900101 19901231 2000 my_few
   ```
 
   `CP_TIME[my_few]` and `MEM[my_few]` are optional (they fall back to

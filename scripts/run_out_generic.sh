@@ -3,10 +3,6 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --hint=nomultithread
-#SBATCH --account=
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=
-#SBATCH --chdir=
 #
 # scripts/run_out_generic.sh
 #
@@ -14,16 +10,16 @@
 # (all run_out_* variants in this repo). Which variables/programs it runs is
 # looked up from config/varsets.sh using the 4th argument.
 #
-# --account/--mail-user/--chdir above are the only site-specific bits left
-# in this file (there are only 3 scripts total now, so it's simpler to just
-# edit them directly in each than to maintain a shared-options mechanism —
-# see run_cp_generic.sh and run_Analysis_v2.sh for the other two).
+# Nothing site-specific lives in this file: --account / --mail-type /
+# --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
+# by submit.sh — which is also how this script submits its own follow-up
+# jobs.
 #
 # Usage (ROOT_DIR must be exported first — see README.md):
 #   export ROOT_DIR=/path/to/this/repo
-#   sbatch --job-name=wrf-<varset> --time=<hh:mm:ss> --mem=<size> \
+#   $ROOT_DIR/submit.sh --job-name=wrf-<varset> --time=<hh:mm:ss> --mem=<size> \
 #          --output=wrf-<varset>.%j.out --error=wrf-<varset>.%j.out \
-#          $ROOT_DIR/scripts/run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>
+#          run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>
 #
 # You can submit from anywhere (e.g. $SCRATCH/Analysis) — ROOT_DIR is what
 # tells this script (and everything it chains to) where the actual code,

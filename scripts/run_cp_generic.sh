@@ -3,10 +3,6 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --hint=nomultithread
-#SBATCH --account=
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=
-#SBATCH --chdir=
 #
 # scripts/run_cp_generic.sh
 #
@@ -16,15 +12,15 @@
 # always matches what run_out_generic.sh just produced for that varset —
 # no separate variable list to keep in sync.
 #
-# --account/--mail-user/--chdir above are the only site-specific bits left
-# in this file — edit them directly here (and in run_out_generic.sh /
-# run_Analysis_v2.sh, the only other two scripts).
+# Nothing site-specific lives in this file: --account / --mail-type /
+# --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
+# by submit.sh.
 #
 # Usage (ROOT_DIR must be exported first — see README.md):
 #   export ROOT_DIR=/path/to/this/repo
-#   sbatch --job-name=cp-<varset> --time=<hh:mm:ss> \
+#   $ROOT_DIR/submit.sh --job-name=cp-<varset> --time=<hh:mm:ss> \
 #          --output=cp-<varset>.%j.out --error=cp-<varset>.%j.out \
-#          $ROOT_DIR/scripts/run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
+#          run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
 #
 # Normally you don't call this directly — run_out_generic.sh submits it
 # automatically after processing each varset.

@@ -3,21 +3,20 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --hint=nomultithread
-#SBATCH --account=
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=
-#SBATCH --chdir=
 
 # ------------------------------------------------------------------
-#  --account/--mail-user/--chdir above are the only site-specific bits left
-#  in this file — edit them directly here (and in run_out_generic.sh /
-#  run_cp_generic.sh, the only other two scripts).
+#  Nothing site-specific lives in this file: --account / --mail-type /
+#  --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
+#  by submit.sh.
 #
 #  Run using (ROOT_DIR must be exported first — see README.md):
 #
 #  export ROOT_DIR=/path/to/this/repo
-#  sbatch $ROOT_DIR/scripts/run_Analysis_v2.sh \
+#  $ROOT_DIR/submit.sh run_Analysis_v2.sh \
 #         [initial date - yyyymmdd] [final date - yyyymmdd] [loop year limit - yyyy]
+#
+#  Use submit.sh rather than plain sbatch, or the env.site.sh job
+#  settings won't be applied.
 #
 #  You can submit from anywhere (e.g. $SCRATCH/Analysis) — ROOT_DIR is what
 #  tells this script where the actual code/config live; it does not need

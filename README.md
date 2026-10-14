@@ -125,8 +125,11 @@ cp env.site.sh.example env.site.sh
 
 `env.site.sh` is gitignored — it never gets committed.
 
-**`--account` / `--mail-user` / `--chdir` are not set here** — see
-[§6](#6-submission-scripts-scripts-folder) below.
+* **Slurm job settings** — `JOB_ACCOUNT`, `JOB_MAIL_TYPE`,
+  `JOB_MAIL_USER`, `JOB_CHDIR`. `submit.sh` passes them to every job as
+  `--account` / `--mail-type` / `--mail-user` / `--chdir` (see
+  [§6](#6-submission-scripts-scripts-folder)). Leave one empty to not pass
+  that flag.
 
 ## 5. Variable Sets (`config/varsets.sh`)
 
@@ -150,8 +153,8 @@ Each varset maps to one or more variable "groups", each with its own
 program pattern:
 
 ```
-[out]="RCM_sfc_VAR:tas,ts,th,..."                 # RCM_sfc_tas.f90, RCM_sfc_ts.f90, ...
-[cloud]="RCM_sfc_cloud:clh,clm,cll,clt"            # always RCM_sfc_cloud.f90
+[out1]="RCM_sfc_VAR:tas,ts,th,..."                # RCM_sfc_tas.f90, RCM_sfc_ts.f90, ...
+[cloud1]="RCM_sfc_cloud:clh,clm"                  # always RCM_sfc_cloud.f90
 [plev_ta]="RCM_plev_ta:ta1000,ta925,...,ta30"      # always RCM_plev_ta.f90, all 16 levels
 [zlev_uava0]="RCM_zlev_uava:va50m,va150m,va100m"   # always RCM_zlev_uava.f90
 ```
@@ -207,14 +210,16 @@ per-variable files:
 | `run_cp_generic.sh` | all `run_cp_*.sh` | archives one varset's output to ECFS + remote |
 | `run_Analysis_v2.sh` | itself (orchestrator) | submits every varset in `ORDER`, 120s apart |
 
-**Slurm account/mail/chdir:** with only 3 scripts, there's no separate
-options file to maintain — `sbatch` has no flag to merge one in anyway
-(not supported by ECMWF's `sbatch`). Just edit the `#SBATCH --account=`,
-`--mail-type=`, `--mail-user=`, `--chdir=` lines directly at the top of
-all 3 scripts (identical in each).
+**Slurm account/mail/chdir:** set once in `env.site.sh` (`JOB_ACCOUNT`,
+`JOB_MAIL_TYPE`, `JOB_MAIL_USER`, `JOB_CHDIR` — §4), not in the scripts.
+`#SBATCH` lines are read by `sbatch` before a script starts, so a script
+can't load them from a file itself; instead every job is submitted through
+`submit.sh`, which reads those four values from `env.site.sh` and passes
+them on the `sbatch` command line. That includes the jobs the scripts
+submit for each other, so **submit your first job through `submit.sh`
+too** (§10) — a job started with plain `sbatch` won't get these settings.
 
-Everything else in these 3 scripts is generic — you should not need to
-edit anything below their `#SBATCH` block.
+The 3 scripts are fully generic — you should not need to edit them.
 
 ## 7. Archiving
 
@@ -241,20 +246,24 @@ compile/run environment) live in `env.site.sh`: `CP_MODULES`, `CP_RUN_DIR`,
 ## 8. Chaining behaviour
 
 Each varset's year loop resubmits another varset when it finishes (`NEXT[]`
-in `config/varsets.sh`), verified against each live script's *uncommented*
-`sbatch` call:
+in `config/varsets.sh`). The varsets are arranged in 10 parallel
+"streams", balanced on measured run times so each takes about the same
+time per model year (~21h) — the table at the top of `config/varsets.sh`
+lists them:
 
-- **2-cycles**: `out↔soil`, `rad↔snw`, `cloud↔wxtrm`, `tau↔wpth`,
-  `plev_wa↔plev_zg`, `plev_hus↔zlev_hus`, `plev_ta↔zlev_ta`
-- **Self-loops** (resubmits itself each year): `plev_uava`, `zlev_uava0`,
-  `zlev_uava1`
+- **2-hop chains**: `plev_uava→wxtrm`, `cloud1→wpth1`, `cloud2→wpth3`,
+  `plev_zg→snw`, `plev_ta→wpth2`, `rad→out1`
+- **3-hop chains**: `plev_wa→zlev_hus→zlev_ta`, `plev_hus→soil→out2`
+- **Self-loops** (resubmits itself each year): `zlev_uava0`, `zlev_uava1`
 
-Only about half the varsets actually advance `yeari`/`yearf` before
-resubmitting (`ADVANCE_YEAR[]`) — in each 2-cycle, one side advances the
-year and the other doesn't, so the pair advances one year per full
-round-trip rather than per hop. This is preserved as-is from the original
-scripts rather than "fixed", since changing it would double the effective
-year-advance rate.
+`ORDER` holds the first link of each stream. Exactly one link per stream
+advances `yeari`/`yearf` (`ADVANCE_YEAR[]`) — the last one before the
+chain returns to its first link — so each stream advances one year per
+full round-trip, not per hop.
+
+To rebalance (e.g. after run times change), run `report_walltimes.sh` and
+move variables between varsets: every program runs once per variable or
+level, so any varset can be split.
 
 ## 9. Where the code lives (`ROOT_DIR`)
 
@@ -277,9 +286,8 @@ export ROOT_DIR=$HPCPERM/CORDEX/scenarios/Analysis
 ```
 
 This is completely independent of:
-- **where you submit from** — anywhere, e.g. `$SCRATCH/Analysis` (set as
-  `--chdir` in the 3 scripts' `#SBATCH` headers if you want job logs to
-  land there)
+- **where you submit from** — anywhere, e.g. `$SCRATCH/Analysis` (set
+  `JOB_CHDIR` in `env.site.sh` if you want job logs to land there)
 - **`RUN_DIR`** (`env.site.sh`) — per-run scratch working directory used
   while processing (e.g. `$SCRATCH/ssp370/out`)
 - **`CP_RUN_DIR`** (`env.site.sh`) — where finished output files land
@@ -296,8 +304,8 @@ This is completely independent of:
 5. Check `config/varsets.sh` covers the variables you need (§5) —
    `MIGRATION.md` maps old script names to varsets if you're coming from
    the previous per-variable-script layout.
-6. Fill in `--account`/`--mail-user`/`--chdir` at the top of all 3 scripts
-   in `scripts/` (§6).
+6. In `env.site.sh`, fill in `JOB_ACCOUNT`, `JOB_MAIL_USER` and
+   `JOB_CHDIR` (§4, §6) — nothing to edit in `scripts/`.
 
 ### Standard submission
 
@@ -311,11 +319,14 @@ self-resubmission at a specific year so a stuck loop doesn't run forever.
 cd $SCRATCH/Analysis   # or wherever you want to submit from — doesn't have to be ROOT_DIR
 
 # Syntax
-sbatch $ROOT_DIR/scripts/run_Analysis_v2.sh <datebeg> <dateend> <year_lim>
+$ROOT_DIR/submit.sh run_Analysis_v2.sh <datebeg> <dateend> <year_lim>
 
 # Example: process 2001, then keep chaining year by year until 2005
-sbatch $ROOT_DIR/scripts/run_Analysis_v2.sh 20010101 20011231 2005
+$ROOT_DIR/submit.sh run_Analysis_v2.sh 20010101 20011231 2005
 ```
+
+Always submit through `submit.sh` (not plain `sbatch`): it's what applies
+the `env.site.sh` job settings (§6).
 
 ### Extracting a single variable/varset
 
@@ -324,9 +335,9 @@ old `run_out_<x>.sh` script went) to find which varset covers your
 variable, then submit it directly — no file to modify:
 
 ```bash
-sbatch --job-name=wrf-soil --time=12:00:00 --mem=8G \
+$ROOT_DIR/submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
        --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       $ROOT_DIR/scripts/run_out_generic.sh 19900101 19901231 2000 soil
+       run_out_generic.sh 19900101 19901231 2000 soil
 ```
 
 ### Extracting multiple years in a single submission
@@ -341,9 +352,9 @@ since that part is unconditional):
 
 ```bash
 # Process 2001-2005 in one job, no auto-chained follow-up job
-sbatch --job-name=wrf-out --time=18:00:00 --mem=8G \
+$ROOT_DIR/submit.sh --job-name=wrf-out --time=18:00:00 --mem=8G \
        --output=wrf-out.%j.out --error=wrf-out.%j.out \
-       $ROOT_DIR/scripts/run_out_generic.sh 20010101 20051231 2000 out
+       run_out_generic.sh 20010101 20051231 2000 out
 ```
 
 (Previously this required commenting out lines in every `run_out*.sh` file
