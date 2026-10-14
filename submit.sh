@@ -3,7 +3,7 @@
 # submit.sh
 #
 # Thin wrapper around sbatch, used for EVERY job in this pipeline (the
-# first run_Analysis_v2.sh submission and every job the scripts chain to).
+# first run_analysis.sh submission and every job the scripts chain to).
 # It:
 #   - auto-detects ROOT_DIR from where THIS file lives and passes it into
 #     the job's environment via `sbatch --export`, and
@@ -21,7 +21,7 @@
 # Flags given on the command line override the env.site.sh values.
 #
 # Examples:
-#   ./submit.sh run_Analysis_v2.sh 20010101 20011231 2005
+#   ./submit.sh run_analysis.sh 20010101 20011231 2005
 #   ./submit.sh --job-name=wrf-fx --time=12:00:00 --mem=8G --output=wrf-fx.%j.out run_out_generic.sh 20010101 20011231 2000 fx
 
 set -euo pipefail

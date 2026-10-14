@@ -11,7 +11,7 @@
 #
 #  Run using:
 #
-#  ./submit.sh run_Analysis_v2.sh \
+#  ./submit.sh run_analysis.sh \
 #         [initial date - yyyymmdd] [final date - yyyymmdd] [loop year limit - yyyy]
 #
 #  Use submit.sh rather than plain sbatch, or the env.site.sh job
@@ -49,6 +49,11 @@ echo "$datebeg"
 echo "$dateend"
 
 source "${REPO_DIR}/config/varsets.sh"
+
+if [ "${#ORDER[@]}" -eq 0 ]; then
+  echo "ORDER in config/varsets.sh is empty — nothing to submit. (With the no-chaining varsets_single.sh, uncomment one of its ORDER batches first.)" >&2
+  exit 1
+fi
 
 for vs in "${ORDER[@]}"; do
   ${REPO_DIR}/submit.sh --job-name="wrf-${vs}" --time="${TIME[$vs]}" --mem="${MEM[$vs]:-$DEFAULT_MEM}" \
