@@ -30,9 +30,10 @@
 #
 # varsets_single.sh — NO-CHAINING variant of config/varsets.sh
 #
-# Use this when you want each job to process its varset (for one year or a
-# range of years) and then STOP — no follow-up job is submitted. The
-# archive (cp-*) job still runs after each processing job.
+# Every varset loops on ITSELF: it processes one year, submits its archive
+# (cp-*) job, then resubmits itself for the next year, until year_lim —
+# the same self-loop zlev_uava0/zlev_uava1 use in config/varsets.sh. No
+# varset hands over to a different one.
 #
 # How to switch (from ROOT_DIR):
 #   cp config/varsets.sh config/varsets_chain.sh     # keep the chained one
@@ -44,10 +45,6 @@
 # when it STARTS. So only switch when no chained jobs are queued or
 # running — a chained job that starts after the switch won't resubmit
 # its next link, and that stream stops.
-#
-# TIME[] limits are for ONE model year. A job covering several years
-# needs --time of roughly (years x the one-year limit); submit it
-# directly with ./submit.sh and pass --time yourself (README.md §10).
 #
 # VARSETS/TIME/MEM/CP_* below are a copy of config/varsets.sh — if you
 # change a varset there, change it here too. Only NEXT, ADVANCE_YEAR and
@@ -171,33 +168,73 @@ declare -A CP_EXTRA=(
 )
 
 #----------------------------------------------------------------
-# ADVANCE_YEAR[] / NEXT[] — empty: no varset resubmits anything when it
-# finishes. (ADVANCE_YEAR only matters to varsets with a NEXT entry.)
+# ADVANCE_YEAR[] / NEXT[] — every processing varset is its own next link
+# and advances the year itself: run year Y, archive it, resubmit for Y+1,
+# and stop after year_lim.
 #----------------------------------------------------------------
-declare -A ADVANCE_YEAR=()
-declare -A NEXT=()
+declare -A ADVANCE_YEAR=(
+  [plev_uava]=1
+  [wxtrm]=1
+  [zlev_uava0]=1
+  [zlev_uava1]=1
+  [cloud1]=1
+  [wpth1]=1
+  [cloud2]=1
+  [wpth3]=1
+  [plev_zg]=1
+  [snw]=1
+  [plev_ta]=1
+  [wpth2]=1
+  [rad]=1
+  [out1]=1
+  [plev_wa]=1
+  [zlev_hus]=1
+  [zlev_ta]=1
+  [plev_hus]=1
+  [soil]=1
+  [out2]=1
+)
+declare -A NEXT=(
+  [plev_uava]="plev_uava"
+  [wxtrm]="wxtrm"
+  [zlev_uava0]="zlev_uava0"
+  [zlev_uava1]="zlev_uava1"
+  [cloud1]="cloud1"
+  [wpth1]="wpth1"
+  [cloud2]="cloud2"
+  [wpth3]="wpth3"
+  [plev_zg]="plev_zg"
+  [snw]="snw"
+  [plev_ta]="plev_ta"
+  [wpth2]="wpth2"
+  [rad]="rad"
+  [out1]="out1"
+  [plev_wa]="plev_wa"
+  [zlev_hus]="zlev_hus"
+  [zlev_ta]="zlev_ta"
+  [plev_hus]="plev_hus"
+  [soil]="soil"
+  [out2]="out2"
+)
 
 #----------------------------------------------------------------
-# ORDER — what run_analysis.sh submits, all at once (120s apart).
+# ORDER — what run_analysis.sh submits (120s apart). Each entry starts its
+# own year-by-year loop.
 #
-# Empty by default: without chaining, every varset you want must be listed
-# here, and they all run at the same time. There are 20 processing
-# varsets, more than the 11 processors you may use at once, so pick ONE of
-# the two batches below (10 each, leaving one processor for archive jobs),
-# run it, then the other — or list only the varsets you need.
+# Empty by default: every varset you list runs at the same time, and there
+# are 20 processing varsets — more than the 11 processors you may use at
+# once. Pick ONE of the two batches below (10 each, leaving one processor
+# for archive jobs) and run it through to year_lim, then the other — or
+# list only the varsets you need.
 #
-# run_analysis.sh uses TIME[] (one year), so through ORDER keep each job
-# to one year (datebeg/dateend in the same year).
-#
-# For one varset, or several years in one job, skip ORDER and submit it
-# directly, scaling --time to the number of years (README.md §10), e.g.
-# soil for 2001-2005 (~5h per year):
-#   ./submit.sh --job-name=wrf-soil --time=30:00:00 --mem=8G \
+# To run just one varset, skip ORDER and submit it directly (README.md
+# §10), e.g. soil from 2001 to 2005, one year per job:
+#   ./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
 #          --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-#          run_out_generic.sh 20010101 20051231 2005 soil
+#          run_out_generic.sh 20010101 20011231 2005 soil
 #----------------------------------------------------------------
 ORDER=()
-# Batch 1 (the first link of each chained stream):
+# Batch 1:
 #ORDER=(plev_uava zlev_uava0 zlev_uava1 cloud1 cloud2 plev_zg plev_ta rad plev_wa plev_hus)
-# Batch 2 (the rest):
+# Batch 2:
 #ORDER=(wxtrm wpth1 wpth3 snw wpth2 out1 zlev_hus zlev_ta soil out2)

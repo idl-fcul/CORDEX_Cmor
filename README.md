@@ -24,7 +24,7 @@ f90_src/       <- Fortran source (RCM_sfc_*.f90, RCM_plev_*.f90, RCM_zlev_*.f90,
 header/        <- per-variable namelist headers
 header_ini/    <- per-domain grid/global config (see header_ini/README.md)
 config/        <- varsets.sh: the single source of truth for variables/programs/scheduling (see config/README.md);
-                  varsets_single.sh: the same without chaining (§10)
+                  varsets_single.sh: every varset loops on itself (§10)
 scripts/       <- the 3 generic job scripts
 env.site.sh.example, LICENSE, README.md, MIGRATION.md
 ```
@@ -335,67 +335,66 @@ the `env.site.sh` job settings (§6).
 
 Check `config/varsets.sh` (or `MIGRATION.md` if you're looking for where an
 old `run_out_<x>.sh` script went) to find which varset covers your
-variable, then submit it directly — no file to modify:
+variable, then submit it directly:
 
 ```bash
+# soil for 1990 only
 ./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
        --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 19900101 19901231 2000 soil
+       run_out_generic.sh 19900101 19901231 1990 soil
 ```
 
-### Extracting multiple years in a single submission
+With the normal `config/varsets.sh`, most varsets hand over to the next
+varset of their stream when they finish (soil → out2, …), so do this with
+`config/varsets_single.sh` in place (see the next section). There, a
+varset only resubmits itself, and setting `year_lim` to the same year
+makes it stop after that year. `fx` has no `NEXT[]` entry in either file,
+so it never chains.
 
-Set `datebeg`/`dateend` to span the whole period you want processed in one
-job — `run_out_generic.sh`'s internal year loop already handles a range.
+### Extracting several years of one varset
 
-**Take care with `NEXT[]`.** With the normal `config/varsets.sh`, a job
-that finishes resubmits the next varset in its chain (`NEXT[]`, §8), and
-that chain keeps going year by year until `year_lim`. That is what you
-want for a production run, but not for a one-off extraction: you would
-start a whole stream, not one job.
+**Take care with `NEXT[]`.** With the normal `config/varsets.sh`, a
+finished job hands over to the next varset in its stream (`NEXT[]`, §8),
+so submitting one varset on its own starts the other varsets of its
+stream too, year by year until `year_lim`.
 
-For one-off or multi-year extractions, use the no-chaining config,
-**`config/varsets_single.sh`**. It has the same varsets, time limits and
-memory, but `NEXT[]` is empty, so every job processes its years, archives
-them, and stops. To use it, keep a copy of the chained file and put the
-single one in its place:
+To run varsets on their own, use **`config/varsets_single.sh`**. It has
+the same varsets, time limits and memory, but every varset loops on
+itself, like `zlev_uava0` and `zlev_uava1` do: it processes one year,
+submits its archive (`cp-*`) job, and resubmits itself for the next year,
+stopping after `year_lim`. To use it, keep a copy of the chained file and
+put the single one in its place:
 
 ```bash
 cd $ROOT_DIR    # the repo
 cp config/varsets.sh        config/varsets_chain.sh   # keep the original
-cp config/varsets_single.sh config/varsets.sh         # no chaining from now on
+cp config/varsets_single.sh config/varsets.sh         # every varset loops on itself
 ```
 
-and to go back to production runs:
+and to go back to the normal streams:
 
 ```bash
 cp config/varsets_chain.sh config/varsets.sh
 ```
 
 Every job reads `config/varsets.sh` when it **starts**, so only switch when
-no chained jobs are queued or running — otherwise those streams stop at
-their next link.
+no chained jobs are queued or running — otherwise those jobs pick up the
+new `NEXT[]` at their next link.
 
-Then submit the varset directly. The `TIME[]` limits are for **one** model
-year, so scale `--time` to the number of years yourself (and stay within the
-queue's maximum walltime — split long periods into several jobs):
+Then submit the varset for its first year, with the last year as
+`year_lim`:
 
 ```bash
-# Process 2001-2005 of soil in one job (~5h per year -> 5 x 5h, plus margin)
-./submit.sh --job-name=wrf-soil --time=32:00:00 --mem=8G \
+# soil, 2001 to 2005, one year per job
+./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
        --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 20010101 20051231 2005 soil
+       run_out_generic.sh 20010101 20011231 2005 soil
 ```
 
 `run_analysis.sh` works with `varsets_single.sh` too, but its `ORDER` is
-empty by default: without chaining, everything listed runs at once, so
-uncomment one of the two batches in the file (10 varsets each) and keep
-each job to one year.
-
-(Without switching files, setting `year_lim` to a year **before** the start
-year also stops the chaining, since the resubmission check
-`yeari <= year_lim` is then false — but that is easy to get wrong, and a
-mistake starts a full chain.)
+empty by default: each entry starts its own loop and they all run at
+once, so uncomment one of the two batches in the file (10 varsets each,
+within the 11-processor limit), or list only the varsets you need.
 
 ## 11. Adding/changing a variable set
 

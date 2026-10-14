@@ -65,14 +65,14 @@ instead of letting each varset re-queue itself or its pair indefinitely:
   3 above becomes a no-op for that varset — it processes its date range,
   archives, and stops. Nothing else changes; `ORDER` and `run_analysis.sh`
   still work exactly the same for one-shot submission.
-- **Globally:** use `config/varsets_single.sh` — a copy of this file with
-  `NEXT[]` already empty. Keep a copy of the chained file
-  (`cp varsets.sh varsets_chain.sh`) and copy `varsets_single.sh` over
-  `varsets.sh` (main README §10 has the exact steps). Or clear the
-  `NEXT[]` array here yourself (`declare -A NEXT=()`). Every varset in
+- **Globally:** clear the whole `NEXT[]` array (`declare -A NEXT=()`).
+  Every varset in
   `ORDER` then becomes a single one-shot job per invocation of
   `run_analysis.sh` — call it again yourself whenever you want the next
   batch processed.
+- **Each varset on its own, year by year:** use
+  `config/varsets_single.sh`, where every varset loops on itself (main
+  README §10 has the steps for switching to it).
 - Archiving is unaffected either way — it's unconditional (step 2), not
   part of the chain.
 - `ADVANCE_YEAR[]` only matters to varsets that still have a `NEXT[]`
