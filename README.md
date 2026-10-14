@@ -126,9 +126,11 @@ cp env.site.sh.example env.site.sh
 
 `env.site.sh` is gitignored — it never gets committed.
 
-* **Slurm job settings** — `JOB_ACCOUNT`, `JOB_MAIL_TYPE`,
-  `JOB_MAIL_USER`, `JOB_CHDIR`. `submit.sh` passes them to every job as
-  `--account` / `--mail-type` / `--mail-user` / `--chdir` (see
+* **Slurm job settings** — `JOB_QOS`, `JOB_NODES`, `JOB_NTASKS`,
+  `JOB_HINT`, `JOB_ACCOUNT`, `JOB_MAIL_TYPE`, `JOB_MAIL_USER`,
+  `JOB_CHDIR`. `submit.sh` passes them to every job as `--qos` /
+  `--nodes` / `--ntasks` / `--hint` / `--account` / `--mail-type` /
+  `--mail-user` / `--chdir` (see
   [§6](#6-submission-scripts-scripts-folder)). Leave one empty to not pass
   that flag.
 
@@ -211,12 +213,14 @@ per-variable files:
 | `run_cp_generic.sh` | all `run_cp_*.sh` | archives one varset's output to ECFS + remote |
 | `run_analysis.sh` | itself (orchestrator) | submits every varset in `ORDER`, 120s apart |
 
-**Slurm account/mail/chdir:** set once in `env.site.sh` (`JOB_ACCOUNT`,
-`JOB_MAIL_TYPE`, `JOB_MAIL_USER`, `JOB_CHDIR` — §4), not in the scripts.
+**Slurm settings:** all set once in `env.site.sh` (`JOB_QOS`,
+`JOB_NODES`, `JOB_NTASKS`, `JOB_HINT`, `JOB_ACCOUNT`, `JOB_MAIL_TYPE`,
+`JOB_MAIL_USER`, `JOB_CHDIR` — §4); the scripts have no `#SBATCH` lines.
 `#SBATCH` lines are read by `sbatch` before a script starts, so a script
 can't load them from a file itself; instead every job is submitted through
-`submit.sh`, which reads those four values from `env.site.sh` and passes
-them on the `sbatch` command line. That includes the jobs the scripts
+`submit.sh`, which reads these values from `env.site.sh` and passes them
+on the `sbatch` command line. Per-job settings (`--job-name`, `--time`,
+`--mem`, `--output`) come from `config/varsets.sh`. That includes the jobs the scripts
 submit for each other, so **submit your first job through `submit.sh`
 too** (§10) — a job started with plain `sbatch` won't get these settings.
 

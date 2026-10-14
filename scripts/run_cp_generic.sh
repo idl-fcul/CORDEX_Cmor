@@ -1,8 +1,4 @@
 #!/bin/bash
-#SBATCH --qos=nf
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --hint=nomultithread
 #
 # scripts/run_cp_generic.sh
 #
@@ -12,9 +8,10 @@
 # always matches what run_out_generic.sh just produced for that varset —
 # no separate variable list to keep in sync.
 #
-# Nothing site-specific lives in this file: --account / --mail-type /
-# --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
-# by submit.sh.
+# No #SBATCH lines and nothing site-specific in this file: --qos /
+# --nodes / --ntasks / --hint / --account / --mail-type / --mail-user /
+# --chdir all come from env.site.sh (JOB_* settings), passed in by
+# submit.sh.
 #
 # Usage:
 #   ./submit.sh --job-name=cp-<varset> --time=<hh:mm:ss> \
