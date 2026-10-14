@@ -15,6 +15,7 @@ This file goes one level deeper into the mechanics.
 |---|---|---|
 | `VARSETS[]` | varset name | one or more `PROGRAM_PATTERN:var1,var2,...` groups, `;`-separated (see below) |
 | `TIME[]` | varset name | `--time` walltime for that varset's **processing** job |
+| `MEM[]` / `DEFAULT_MEM` | varset name | `--mem` for that varset's **processing** job (falls back to `DEFAULT_MEM`, 8G, if unset) |
 | `CP_TIME[]` / `DEFAULT_CP_TIME` | varset name | `--time` walltime for that varset's **archive** job (falls back to the default if unset) |
 | `ADVANCE_YEAR[]` | varset name | `1` if this varset's own script increments `yeari`/`yearf` by 1 before resubmitting; unset/`0` otherwise |
 | `NEXT[]` | varset name | which varset to auto-resubmit once this one finishes (empty/unset = don't chain) |
@@ -91,12 +92,13 @@ scheduling/chaining or not:
   to submit it manually:
 
   ```bash
-  sbatch --job-name=wrf-my_few --time=04:00:00 \
+  sbatch --job-name=wrf-my_few --time=04:00:00 --mem=8G \
          --output=wrf-my_few.%j.out --error=wrf-my_few.%j.out \
          $ROOT_DIR/scripts/run_out_generic.sh 19900101 19901231 2000 my_few
   ```
 
-  `CP_TIME[my_few]` is optional (falls back to `DEFAULT_CP_TIME`).
+  `CP_TIME[my_few]` and `MEM[my_few]` are optional (they fall back to
+  `DEFAULT_CP_TIME` and `DEFAULT_MEM`).
 
 ## Where variable names and definitions come from
 

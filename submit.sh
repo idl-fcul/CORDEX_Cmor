@@ -10,7 +10,7 @@
 #
 # Examples:
 #   ./submit.sh run_Analysis_v2.sh 20010101 20011231 2005
-#   ./submit.sh --job-name=wrf-fx --time=12:00:00 --output=wrf-fx.%j.out run_out_generic.sh 20010101 20011231 2000 fx
+#   ./submit.sh --job-name=wrf-fx --time=12:00:00 --mem=8G --output=wrf-fx.%j.out run_out_generic.sh 20010101 20011231 2000 fx
 
 set -euo pipefail
 

@@ -324,7 +324,7 @@ old `run_out_<x>.sh` script went) to find which varset covers your
 variable, then submit it directly — no file to modify:
 
 ```bash
-sbatch --job-name=wrf-soil --time=12:00:00 \
+sbatch --job-name=wrf-soil --time=12:00:00 --mem=8G \
        --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
        $ROOT_DIR/scripts/run_out_generic.sh 19900101 19901231 2000 soil
 ```
@@ -341,7 +341,7 @@ since that part is unconditional):
 
 ```bash
 # Process 2001-2005 in one job, no auto-chained follow-up job
-sbatch --job-name=wrf-out --time=18:00:00 \
+sbatch --job-name=wrf-out --time=18:00:00 --mem=8G \
        --output=wrf-out.%j.out --error=wrf-out.%j.out \
        $ROOT_DIR/scripts/run_out_generic.sh 20010101 20051231 2000 out
 ```
@@ -368,6 +368,8 @@ declare -A TIME=(
 Add it to `ORDER` if it should be submitted directly by `run_Analysis_v2.sh`,
 to `NEXT[]` if some varset should chain into (or from) it, and to
 `ADVANCE_YEAR[]=1` if it should advance the year before resubmitting.
+If its jobs need more than the default 8G of memory, add a `MEM[]` entry
+(e.g. `[my_new_set]="16G"`); otherwise it uses `DEFAULT_MEM`.
 
 ## Notes / things to double check before first real run
 
