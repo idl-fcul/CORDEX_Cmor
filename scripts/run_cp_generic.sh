@@ -43,8 +43,12 @@ fi
 #----------------------------------------------------------------
 #                          ENVIRONMENT                            |
 #----------------------------------------------------------------
-# site/user-specific modules & remote paths for the archive step -> env.site.sh
+# site/user-specific modules & remote host for the archive step -> env.site.sh
 source "${REPO_DIR}/env.site.sh"
+
+# experiment: grids, and per grid the output dir and archive paths
+# -> experiments/${EXPERIMENT}.sh
+source "${REPO_DIR}/scripts/load_experiment.sh"
 
 # variable-set definitions -> config/varsets.sh
 source "${REPO_DIR}/config/varsets.sh"
@@ -83,15 +87,20 @@ echo "$yeari"
 yearf=$(echo "$dateend" | cut -c1-4)
 echo "$yearf"
 
-cd "${CP_RUN_DIR}" || exit 1
+# Each grid has its own output directory and its own archive paths
+# (experiments/${EXPERIMENT}.sh), so archive grid by grid.
+for grid in "${GRIDS[@]}"; do
+  echo "Archiving grid ${grid}: ${OUTPUT_DIR[$grid]} -> ${ECFS_BASE[$grid]}, ${REMOTE_HOST}:${REMOTE_BASE[$grid]}"
+  cd "${OUTPUT_DIR[$grid]}" || exit 1
 
-for (( v=0; v<${#var[@]}; v++)); do
-  emkdir -p "${ECFS_BASE}/${var[$v]}"
-  ecp -o "${var[$v]}"_* "${ECFS_BASE}/${var[$v]}/"
-done
+  for (( v=0; v<${#var[@]}; v++)); do
+    emkdir -p "${ECFS_BASE[$grid]}/${var[$v]}"
+    ecp -o "${var[$v]}"_* "${ECFS_BASE[$grid]}/${var[$v]}/"
+  done
 
-for (( v=0; v<${#var[@]}; v++)); do
-  scp "${var[$v]}"_*.nc "${REMOTE_HOST}:${REMOTE_BASE}/${var[$v]}/raw"
+  for (( v=0; v<${#var[@]}; v++)); do
+    scp "${var[$v]}"_*.nc "${REMOTE_HOST}:${REMOTE_BASE[$grid]}/${var[$v]}/raw"
+  done
 done
 
 echo "$0 (${VARSET}) done."
