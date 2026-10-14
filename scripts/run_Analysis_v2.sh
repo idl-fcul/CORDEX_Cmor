@@ -9,27 +9,24 @@
 #  --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
 #  by submit.sh.
 #
-#  Run using (ROOT_DIR must be exported first — see README.md):
+#  Run using:
 #
-#  export ROOT_DIR=/path/to/this/repo
-#  $ROOT_DIR/submit.sh run_Analysis_v2.sh \
+#  ./submit.sh run_Analysis_v2.sh \
 #         [initial date - yyyymmdd] [final date - yyyymmdd] [loop year limit - yyyy]
 #
 #  Use submit.sh rather than plain sbatch, or the env.site.sh job
 #  settings won't be applied.
 #
-#  You can submit from anywhere (e.g. $SCRATCH/Analysis) — ROOT_DIR is what
-#  tells this script where the actual code/config live; it does not need
-#  to match your cwd.
+#  You can submit from anywhere (e.g. $SCRATCH/Analysis): call submit.sh by
+#  its path or through a symlink — it finds the repo itself.
 #-------------------------------------------------------------------
 
 set -x
 
-# ROOT_DIR must be set in your environment — Slurm copies the submitted
-# script into a spool directory before running it, so $0/dirname can't be
-# used to find this repo reliably (especially when submitting from a
-# different directory, e.g. $SCRATCH/Analysis, than where the code lives).
-: "${ROOT_DIR:?ROOT_DIR is not set. export ROOT_DIR=/path/to/this/repo (e.g. in ~/.bashrc) before submitting — see README.md}"
+# ROOT_DIR is set by submit.sh (from its own location) and passed into the
+# job. It can't be worked out here from $0, because Slurm runs a spooled
+# copy of this script, not the file in the repo.
+: "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §10)}"
 REPO_DIR="${ROOT_DIR}"
 
 #### Load libraries used by this orchestration step only

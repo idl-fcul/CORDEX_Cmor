@@ -16,9 +16,8 @@
 # --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
 # by submit.sh.
 #
-# Usage (ROOT_DIR must be exported first — see README.md):
-#   export ROOT_DIR=/path/to/this/repo
-#   $ROOT_DIR/submit.sh --job-name=cp-<varset> --time=<hh:mm:ss> \
+# Usage:
+#   ./submit.sh --job-name=cp-<varset> --time=<hh:mm:ss> \
 #          --output=cp-<varset>.%j.out --error=cp-<varset>.%j.out \
 #          run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
 #
@@ -28,9 +27,10 @@
 
 set -x
 
-# ROOT_DIR must be set in your environment — see run_out_generic.sh's
-# comment on why $0/dirname can't be used to find this repo under Slurm.
-: "${ROOT_DIR:?ROOT_DIR is not set. export ROOT_DIR=/path/to/this/repo (e.g. in ~/.bashrc) before submitting — see README.md}"
+# ROOT_DIR is set by submit.sh (from its own location) and passed into the
+# job. It can't be worked out here from $0, because Slurm runs a spooled
+# copy of this script, not the file in the repo.
+: "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §10)}"
 REPO_DIR="${ROOT_DIR}"
 
 datebeg=$1
