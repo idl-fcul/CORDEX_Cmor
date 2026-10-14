@@ -63,7 +63,7 @@ fi
 source "${REPO_DIR}/env.site.sh"
 
 # experiment: grids, and per grid the WRF input / output / archive paths
-# -> experiments/${EXPERIMENT}.sh
+# -> experiments/${EXPERIMENT}/${EXPERIMENT}.sh
 source "${REPO_DIR}/scripts/load_experiment.sh"
 
 # variable-set definitions, walltimes, chaining -> config/varsets.sh
@@ -75,16 +75,16 @@ if [ -z "${VARSETS[$VARSET]+x}" ]; then
   exit 1
 fi
 
-# The xtrm variant of the grid/domain-setup ini (<exp>_xtrm_<dom_id>_<grid>.ini,
-# sourced from wrfxtrm rather than wrfout — see header_ini/README.md) is only
-# correct for the varset that actually runs RCM_sfc_xtrm. Every other varset
-# keeps using the plain <exp>_<dom_id>_<grid>.ini.
+# wxtrm (RCM_sfc_xtrm) reads the wrfxtrm files instead of wrfout; every
+# other varset reads wrfout. Same ini files either way — only the
+# _WRFFILE_ placeholder changes (see experiments/README.md).
 wrffile="wrfout"
 if [ "${VARSET}" = "wxtrm" ] || [ "${VARSET}" = "testex" ]; then
   wrffile="wrfxtrm"
 fi
 
-# EXPERIMENT also picks the header_ini files (<exp>_<DOMAIN_ID>_<grid>.ini).
+# The experiment's ini files (<exp>_<DOMAIN_ID>_<grid>.ini and
+# <exp>_global_<DOMAIN_ID>_<grid>.ini) are in EXPERIMENT_DIR, its folder.
 exp="${EXPERIMENT}"
 
 # VARSETS[$VARSET] looks like "PROGRAM_A:var1,var2;PROGRAM_B:var3,var4"
@@ -123,7 +123,7 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
   dom_id="${DOMAIN_ID[${grid}]}"
   mkdir -p "${OUTPUT_DIR[${grid}]}"
 
-  cp ${HEADER_INI_DIR}/${exp}_global_${dom_id}_${grid}.ini  global_data.inp
+  cp "${EXPERIMENT_DIR}/${exp}_global_${dom_id}_${grid}.ini" global_data.inp
 
 #
 # Variables (a varset can have more than one group — see config/varsets.sh)
@@ -142,7 +142,7 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
      -e "s|_WRFFILE_|${wrffile}|g" \
      -e "s|_OUTPUT_WRF_|${OUTPUT_WRF[${grid}]}/|g" \
      -e "s|_OUTPUT_DIR_|${OUTPUT_DIR[${grid}]}/|g" \
-     "${HEADER_INI_DIR}/${exp}_${dom_id}_${grid}.ini" \
+     "${EXPERIMENT_DIR}/${exp}_${dom_id}_${grid}.ini" \
      > "${RUN_DIR}/header_${grid}"
     
     cat header_${grid} > inputlist.inp

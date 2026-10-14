@@ -1,11 +1,13 @@
 #!/bin/bash
 #
-# experiments/cordex.sh — EURO-CORDEX CMIP6 scenario run (ssp370)
+# experiments/cordex/cordex.sh — EURO-CORDEX CMIP6 scenario run (ssp370)
 #
-# One file per experiment: which domains to process and, for each domain,
-# where its WRF input is, where its CMORised output goes and where that
-# output is archived. Selected by EXPERIMENT in env.site.sh (the file name
-# without ".sh"), and also picks header_ini/cordex_*.ini.
+# One folder per experiment, experiments/<name>/, holding this file and the
+# experiment's ini files (cordex_<DOMAIN_ID>_<grid>.ini and
+# cordex_global_<DOMAIN_ID>_<grid>.ini, one pair per grid). This file says
+# which domains to process and, for each domain, where its WRF input is,
+# where its CMORised output goes and where that output is archived.
+# Selected by EXPERIMENT="cordex" in env.site.sh.
 #
 # Every array below is keyed by grid (d01, d02, ...). Each grid listed in
 # run[] needs an entry in all the others.
@@ -19,8 +21,8 @@ declare -A run=(
   [d01]=1
 )
 
-# CORDEX domain ID per grid — picks header_ini/cordex_<ID>_<grid>.ini and
-# header_ini/cordex_global_<ID>_<grid>.ini.
+# CORDEX domain ID per grid — picks cordex_<ID>_<grid>.ini and
+# cordex_global_<ID>_<grid>.ini in this folder.
 declare -A DOMAIN_ID=(
   [d01]="EUR-12"
 )

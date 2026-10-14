@@ -107,11 +107,11 @@ mapfile -t job_values <<< "${job_settings}"
 
 CMOR_EXPERIMENT="${job_values[${#job_vars[@]}]%|}"
 if [ -z "${CMOR_EXPERIMENT}" ]; then
-  echo "No EXPERIMENT set in ${env_file} — add EXPERIMENT=\"<name>\" matching a file experiments/<name>.sh." >&2
+  echo "No EXPERIMENT set in ${env_file} — add EXPERIMENT=\"<name>\" matching a folder experiments/<name>/." >&2
   exit 1
 fi
-if [ ! -f "${ROOT_DIR}/experiments/${CMOR_EXPERIMENT}.sh" ]; then
-  echo "No experiment file ${ROOT_DIR}/experiments/${CMOR_EXPERIMENT}.sh (EXPERIMENT=\"${CMOR_EXPERIMENT}\")." >&2
+if [ ! -f "${ROOT_DIR}/experiments/${CMOR_EXPERIMENT}/${CMOR_EXPERIMENT}.sh" ]; then
+  echo "No experiment file ${ROOT_DIR}/experiments/${CMOR_EXPERIMENT}/${CMOR_EXPERIMENT}.sh (EXPERIMENT=\"${CMOR_EXPERIMENT}\")." >&2
   exit 1
 fi
 
