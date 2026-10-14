@@ -7,17 +7,17 @@ schedule each job for, and how (or whether) jobs chain into one another.
 everything specific to a given "varset" lives here, not in the scripts.
 
 The scripts only ever read `config/varsets.sh`. Two saved layouts sit
-next to it, to copy over it when needed (main README §10):
+next to it, to copy over it when needed (main README §0):
 
 | File | Layout |
 |---|---|
-| `varsets_chain.sh` | the chained streams (§8) — a saved copy of the default `varsets.sh` |
+| `varsets_chain.sh` | the chained streams (main README §8) — a saved copy of the default `varsets.sh` |
 | `varsets_single.sh` | every varset loops on itself, year by year |
 
 When you change a varset, make the same change in all three files.
 
-See the main [README.md](../README.md) (§5) for the full onboarding walkthrough.
-This file goes one level deeper into the mechanics.
+See the main [README.md](../README.md) (§0 to start, §5 for this file)
+for the walkthrough. This file goes one level deeper into the mechanics.
 
 ## The arrays
 
@@ -44,9 +44,10 @@ VARSETS[name] = "<program-pattern>:<var1>,<var2>,...[;<program-pattern>:<var...>
 - a name containing the literal string `VAR`, substituted with each
   variable in turn (e.g. `RCM_sfc_VAR` → `RCM_sfc_tas`, `RCM_sfc_ts`, ...)
 
-Most varsets are a single group. `acum`'s replacement (`rad`) used to need
-two — see the git history / `MIGRATION.md` for a worked example of a
-multi-group entry.
+Most varsets are a single group. A varset can mix programs by listing
+several groups, e.g.
+`[mix]="RCM_sfc_VAR:tas,pr;RCM_sfc_rad:rsds"` runs `RCM_sfc_tas`,
+`RCM_sfc_pr`, then `RCM_sfc_rad` for `rsds`, all in one job.
 
 ### Special entries in `VARSETS[]`
 
@@ -94,7 +95,7 @@ The slowest stream went from 28h06 per year (`plev_hus` → `wpth1`) to
 about 21h, roughly 25% faster per model year; total work is unchanged
 (~206h per year), just spread evenly. The `zlev_uava0/1` estimate is
 1.1 × `zlev_va0`, taken as its 19h limit since there's no measured run yet.
-Re-run `report_walltimes.sh` (main README §12) after the first full year
+Re-run `report_walltimes.sh` (main README §11) after the first full year
 and rebalance if these, `out1` or `out2` differ much from the estimates.
 
 ## Time limits (`TIME[]`)
@@ -154,29 +155,31 @@ ECMWF) are listed. A program keeps the whole year of its output in memory:
    the year first if `ADVANCE_YEAR[<varset>]=1`. The advancing link uses
    `yeari < year_lim` instead, so the stream stops after `year_lim`.
 
-Step 3 is what's referred to below as the "legacy loop": it reproduces the
-per-stream resubmission (`rad→out1→rad`, self-loops like `zlev_uava0`,
-etc. — see the main README §8).
-Steps 1–2 happen regardless of `NEXT[]`/`ADVANCE_YEAR[]`.
+Step 3 is the chaining: it runs each stream year after year
+(`rad→out1→rad`, self-loops like `zlev_uava0`, etc. — see the main README
+§8). Steps 1–2 happen regardless of `NEXT[]`/`ADVANCE_YEAR[]`.
 
-## I don't want the legacy self-resubmission loops
+## Turning chaining off
 
 If you'd rather drive year progression yourself (e.g. from a workflow
-manager, a cron job, or by just calling `sbatch` once per year externally)
-instead of letting each varset re-queue itself or its pair indefinitely:
+manager, a cron job, or by calling `./submit.sh` once per year yourself)
+instead of letting each varset resubmit the next one:
+
+Whatever you change, make the same change in `varsets_chain.sh` (or
+`varsets_single.sh`) if you want to keep it when you next switch layouts.
 
 - **Per varset:** leave `NEXT[<varset>]` unset (or delete its entry). Step
   3 above becomes a no-op for that varset — it processes its date range,
   archives, and stops. Nothing else changes; `ORDER` and `run_analysis.sh`
   still work exactly the same for one-shot submission.
 - **Globally:** clear the whole `NEXT[]` array (`declare -A NEXT=()`).
-  Every varset in
-  `ORDER` then becomes a single one-shot job per invocation of
-  `run_analysis.sh` — call it again yourself whenever you want the next
-  batch processed.
+  Every varset in `ORDER` then becomes a single one-shot job per
+  invocation of `run_analysis.sh` — call it again yourself whenever you
+  want the next batch processed. With only the stream heads in `ORDER`,
+  the other links would then never run, so list every varset you need.
 - **Each varset on its own, year by year:** use
   `config/varsets_single.sh`, where every varset loops on itself (main
-  README §10 has the steps for switching to it).
+  README §0 has the steps for switching to it).
 - Archiving is unaffected either way — it's unconditional (step 2), not
   part of the chain.
 - `ADVANCE_YEAR[]` only matters to varsets that still have a `NEXT[]`
@@ -201,7 +204,7 @@ scheduling/chaining or not:
   ```bash
   ./submit.sh --job-name=wrf-my_few --time=04:00:00 --mem=8G \
          --output=wrf-my_few.%j.out --error=wrf-my_few.%j.out \
-         run_out_generic.sh 19900101 19901231 2000 my_few
+         run_out_generic.sh 19900101 19901231 1990 my_few
   ```
 
   `CP_TIME[my_few]` and `MEM[my_few]` are optional (they fall back to

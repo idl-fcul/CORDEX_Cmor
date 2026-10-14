@@ -3,7 +3,7 @@
 # report_walltimes.sh — longest completed run per varset, from sacct.
 # Usage (on a login node, not via sbatch):
 #   bash report_walltimes.sh [--since <date>] [--margin <percent>] [--clusters <list|all>]
-# See README.md §12.
+# See README.md §11.
 #----------------------------------------------------------------
 
 set -euo pipefail

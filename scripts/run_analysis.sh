@@ -2,13 +2,13 @@
 #
 # scripts/run_analysis.sh — submit the first job of every stream in ORDER.
 # Usage: ./submit.sh run_analysis.sh <datebeg yyyymmdd> <dateend yyyymmdd> <year_lim yyyy>
-# See README.md §10.
+# See README.md §0.
 #----------------------------------------------------------------
 
 set -x
 
 #--- Repo location (set by submit.sh) ---------------------------
-: "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §10)}"
+: "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §0)}"
 REPO_DIR="${ROOT_DIR}"
 
 #--- Modules ----------------------------------------------------

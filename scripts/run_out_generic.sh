@@ -2,13 +2,13 @@
 #
 # scripts/run_out_generic.sh — process one varset, then archive and chain.
 # Usage: ./submit.sh [sbatch options] run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>
-# See README.md §6, §8 and §10.
+# See README.md §6, §8 and §0.
 #----------------------------------------------------------------
 
 set -x
 
 #--- Repo location (set by submit.sh) ---------------------------
-: "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §10)}"
+: "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §0)}"
 REPO_DIR="${ROOT_DIR}"
 
 #--- Arguments --------------------------------------------------
