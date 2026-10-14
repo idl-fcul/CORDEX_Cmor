@@ -3,9 +3,11 @@
 # scripts/load_experiment.sh
 #
 # Sourced by run_out_generic.sh and run_cp_generic.sh, right after
-# env.site.sh. Loads experiments/${EXPERIMENT}.sh and checks that every
-# grid in run[] has all its per-grid settings, so a missing entry fails at
-# the start of the job instead of half-way through.
+# env.site.sh. Loads experiments/${EXPERIMENT}/${EXPERIMENT}.sh and checks
+# that every grid in run[] has all its per-grid settings and its two ini
+# files, so a missing entry fails at the start of the job instead of
+# half-way through. Also sets HEADER_INI_DIR to the experiment's folder,
+# where its ini files live.
 #
 # The experiment is chosen when a run is first submitted (EXPERIMENT in
 # env.site.sh, or EXPERIMENT=<name> ./submit.sh ...). submit.sh passes it
@@ -15,16 +17,22 @@
 # shellcheck disable=SC2154  # run[] etc. come from the experiment file
 
 EXPERIMENT="${CMOR_EXPERIMENT:-${EXPERIMENT:-}}"
-: "${EXPERIMENT:?No EXPERIMENT set — add EXPERIMENT=\"<name>\" to env.site.sh, matching a file experiments/<name>.sh}"
+: "${EXPERIMENT:?No EXPERIMENT set — add EXPERIMENT=\"<name>\" to env.site.sh, matching a folder experiments/<name>/}"
 
-EXPERIMENT_FILE="${ROOT_DIR}/experiments/${EXPERIMENT}.sh"
+EXPERIMENT_DIR="${ROOT_DIR}/experiments/${EXPERIMENT}"
+EXPERIMENT_FILE="${EXPERIMENT_DIR}/${EXPERIMENT}.sh"
 if [ ! -f "${EXPERIMENT_FILE}" ]; then
   echo "No experiment file ${EXPERIMENT_FILE} (EXPERIMENT=\"${EXPERIMENT}\")." >&2
-  _avail=("${ROOT_DIR}"/experiments/*.sh)
-  _avail=("${_avail[@]##*/}")
-  echo "Available: ${_avail[*]%.sh}" >&2
+  _avail=("${ROOT_DIR}"/experiments/*/)
+  _avail=("${_avail[@]%/}")
+  echo "Available: ${_avail[*]##*/}" >&2
   exit 1
 fi
+
+# The experiment's ini files live next to its .sh file (this replaces any
+# HEADER_INI_DIR an older env.site.sh may set).
+# shellcheck disable=SC2034  # used by run_out_generic.sh
+HEADER_INI_DIR="${EXPERIMENT_DIR}"
 
 # Drop any per-experiment settings an older env.site.sh may still define,
 # so only the experiment file's values are used.
@@ -54,6 +62,12 @@ for _grid in "${GRIDS[@]}"; do
       exit 1
     fi
   done
+  for _ini in "${EXPERIMENT}_${DOMAIN_ID[$_grid]}_${_grid}.ini" "${EXPERIMENT}_global_${DOMAIN_ID[$_grid]}_${_grid}.ini"; do
+    if [ ! -f "${EXPERIMENT_DIR}/${_ini}" ]; then
+      echo "${EXPERIMENT_DIR}: grid '${_grid}' (DOMAIN_ID ${DOMAIN_ID[$_grid]}) needs ${_ini}, which isn't there." >&2
+      exit 1
+    fi
+  done
 done
 
 # Two grids writing to the same OUTPUT_DIR would be archived together to
@@ -67,6 +81,6 @@ for _grid in "${GRIDS[@]}"; do
   fi
   _seen[$_d]="${_grid}"
 done
-unset _grid _arr _ref _d _seen
+unset _grid _arr _ref _ini _d _seen
 
 echo "Experiment ${EXPERIMENT}: grids ${GRIDS[*]} (${EXPERIMENT_FILE})"

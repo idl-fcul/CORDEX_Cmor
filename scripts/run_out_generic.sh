@@ -63,7 +63,7 @@ fi
 source "${REPO_DIR}/env.site.sh"
 
 # experiment: grids, and per grid the WRF input / output / archive paths
-# -> experiments/${EXPERIMENT}.sh
+# -> experiments/${EXPERIMENT}/${EXPERIMENT}.sh
 source "${REPO_DIR}/scripts/load_experiment.sh"
 
 # variable-set definitions, walltimes, chaining -> config/varsets.sh
@@ -75,16 +75,16 @@ if [ -z "${VARSETS[$VARSET]+x}" ]; then
   exit 1
 fi
 
-# The xtrm variant of the grid/domain-setup ini (<exp>_xtrm_<dom_id>_<grid>.ini,
-# sourced from wrfxtrm rather than wrfout — see header_ini/README.md) is only
-# correct for the varset that actually runs RCM_sfc_xtrm. Every other varset
-# keeps using the plain <exp>_<dom_id>_<grid>.ini.
+# wxtrm (RCM_sfc_xtrm) reads the wrfxtrm files instead of wrfout; every
+# other varset reads wrfout. Same ini files either way — only the
+# _WRFFILE_ placeholder changes (see experiments/README.md).
 wrffile="wrfout"
 if [ "${VARSET}" = "wxtrm" ] || [ "${VARSET}" = "testex" ]; then
   wrffile="wrfxtrm"
 fi
 
-# EXPERIMENT also picks the header_ini files (<exp>_<DOMAIN_ID>_<grid>.ini).
+# The experiment's ini files (<exp>_<DOMAIN_ID>_<grid>.ini and
+# <exp>_global_<DOMAIN_ID>_<grid>.ini) are in HEADER_INI_DIR, its folder.
 exp="${EXPERIMENT}"
 
 # VARSETS[$VARSET] looks like "PROGRAM_A:var1,var2;PROGRAM_B:var3,var4"

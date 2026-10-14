@@ -47,7 +47,7 @@ fi
 source "${REPO_DIR}/env.site.sh"
 
 # experiment: grids, and per grid the output dir and archive paths
-# -> experiments/${EXPERIMENT}.sh
+# -> experiments/${EXPERIMENT}/${EXPERIMENT}.sh
 source "${REPO_DIR}/scripts/load_experiment.sh"
 
 # variable-set definitions -> config/varsets.sh
@@ -88,7 +88,7 @@ yearf=$(echo "$dateend" | cut -c1-4)
 echo "$yearf"
 
 # Each grid has its own output directory and its own archive paths
-# (experiments/${EXPERIMENT}.sh), so archive grid by grid.
+# (experiments/${EXPERIMENT}/${EXPERIMENT}.sh), so archive grid by grid.
 for grid in "${GRIDS[@]}"; do
   echo "Archiving grid ${grid}: ${OUTPUT_DIR[$grid]} -> ${ECFS_BASE[$grid]}, ${REMOTE_HOST}:${REMOTE_BASE[$grid]}"
   cd "${OUTPUT_DIR[$grid]}" || exit 1
