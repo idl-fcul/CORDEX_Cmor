@@ -20,7 +20,7 @@ This file goes one level deeper into the mechanics.
 | `ADVANCE_YEAR[]` | varset name | `1` if this varset's own script increments `yeari`/`yearf` by 1 before resubmitting; unset/`0` otherwise |
 | `NEXT[]` | varset name | which varset to auto-resubmit once this one finishes (empty/unset = don't chain) |
 | `CP_EXTRA[]` | varset name | an additional varset to archive alongside this one (see "uava" u+v note below) |
-| `ORDER` | — (plain array) | the varsets `run_Analysis_v2.sh` submits directly, in order |
+| `ORDER` | — (plain array) | the varsets `run_analysis.sh` submits directly, in order |
 
 ### `VARSETS[]` syntax
 
@@ -63,12 +63,15 @@ instead of letting each varset re-queue itself or its pair indefinitely:
 
 - **Per varset:** leave `NEXT[<varset>]` unset (or delete its entry). Step
   3 above becomes a no-op for that varset — it processes its date range,
-  archives, and stops. Nothing else changes; `ORDER` and `run_Analysis_v2.sh`
+  archives, and stops. Nothing else changes; `ORDER` and `run_analysis.sh`
   still work exactly the same for one-shot submission.
-- **Globally:** clear out the whole `NEXT[]` array (comment out every
-  line, or replace the block with `declare -A NEXT=()`). Every varset in
+- **Globally:** use `config/varsets_single.sh` — a copy of this file with
+  `NEXT[]` already empty. Keep a copy of the chained file
+  (`cp varsets.sh varsets_chain.sh`) and copy `varsets_single.sh` over
+  `varsets.sh` (main README §10 has the exact steps). Or clear the
+  `NEXT[]` array here yourself (`declare -A NEXT=()`). Every varset in
   `ORDER` then becomes a single one-shot job per invocation of
-  `run_Analysis_v2.sh` — call it again yourself whenever you want the next
+  `run_analysis.sh` — call it again yourself whenever you want the next
   batch processed.
 - Archiving is unaffected either way — it's unconditional (step 2), not
   part of the chain.

@@ -23,7 +23,8 @@ the provided folder structure:
 f90_src/       <- Fortran source (RCM_sfc_*.f90, RCM_plev_*.f90, RCM_zlev_*.f90, ...)
 header/        <- per-variable namelist headers
 header_ini/    <- per-domain grid/global config (see header_ini/README.md)
-config/        <- varsets.sh: the single source of truth for variables/programs/scheduling (see config/README.md)
+config/        <- varsets.sh: the single source of truth for variables/programs/scheduling (see config/README.md);
+                  varsets_single.sh: the same without chaining (§10)
 scripts/       <- the 3 generic job scripts
 env.site.sh.example, LICENSE, README.md, MIGRATION.md
 ```
@@ -190,7 +191,7 @@ Alongside `VARSETS[]`, the same file holds:
 * **`TIME[]`** — walltime to request for each varset's processing job.
 * **`CP_TIME[]`** / **`DEFAULT_CP_TIME`** — walltime for each varset's
   archive job.
-* **`ORDER`** — the varsets `run_Analysis_v2.sh` submits directly (see
+* **`ORDER`** — the varsets `run_analysis.sh` submits directly (see
   [§10](#10-job-submission-instructions)).
 * **`NEXT[]`** and **`ADVANCE_YEAR[]`** — see
   [§8, Chaining behaviour](#8-chaining-behaviour).
@@ -208,7 +209,7 @@ per-variable files:
 |---|---|---|
 | `run_out_generic.sh` | all `run_out_*.sh` | processes one varset for a year range, then submits the archive job and (if configured) the next varset in the chain |
 | `run_cp_generic.sh` | all `run_cp_*.sh` | archives one varset's output to ECFS + remote |
-| `run_Analysis_v2.sh` | itself (orchestrator) | submits every varset in `ORDER`, 120s apart |
+| `run_analysis.sh` | itself (orchestrator) | submits every varset in `ORDER`, 120s apart |
 
 **Slurm account/mail/chdir:** set once in `env.site.sh` (`JOB_ACCOUNT`,
 `JOB_MAIL_TYPE`, `JOB_MAIL_USER`, `JOB_CHDIR` — §4), not in the scripts.
@@ -279,7 +280,7 @@ To submit from another directory (e.g. `$SCRATCH/Analysis`), call
 ```bash
 cd $SCRATCH/Analysis
 ln -s $HPCPERM/CORDEX/scenarios/Analysis/submit.sh .
-./submit.sh run_Analysis_v2.sh 20010101 20011231 2005
+./submit.sh run_analysis.sh 20010101 20011231 2005
 ```
 
 The symlink is resolved, so `ROOT_DIR` still points at the repo. (The
@@ -311,7 +312,7 @@ This is completely independent of:
 
 ### Standard submission
 
-`run_Analysis_v2.sh` is the main controller — it submits every varset in
+`run_analysis.sh` is the main controller — it submits every varset in
 `ORDER` (`config/varsets.sh`), each of which manages its own dependencies
 via `NEXT[]`, submitting some archival/follow-up tasks as soon as its own
 processing finishes. `year_lim` is a failsafe: it stops each chain's
@@ -321,10 +322,10 @@ self-resubmission at a specific year so a stuck loop doesn't run forever.
 cd $SCRATCH/Analysis   # or wherever you want to submit from — doesn't have to be ROOT_DIR
 
 # Syntax
-./submit.sh run_Analysis_v2.sh <datebeg> <dateend> <year_lim>
+./submit.sh run_analysis.sh <datebeg> <dateend> <year_lim>
 
 # Example: process 2001, then keep chaining year by year until 2005
-./submit.sh run_Analysis_v2.sh 20010101 20011231 2005
+./submit.sh run_analysis.sh 20010101 20011231 2005
 ```
 
 Always submit through `submit.sh` (not plain `sbatch`): it's what applies
@@ -345,22 +346,56 @@ variable, then submit it directly — no file to modify:
 ### Extracting multiple years in a single submission
 
 Set `datebeg`/`dateend` to span the whole period you want processed in one
-job — `run_out_generic.sh`'s internal year loop already handles a range,
-independent of the chaining. To stop it from *also* auto-chaining to the
-next varset afterward, set `year_lim` to a year **before** your start year
-— the chain-resubmission check (`yeari <= year_lim`) then evaluates false,
-so no follow-up job gets submitted (the archive step still runs regardless,
-since that part is unconditional):
+job — `run_out_generic.sh`'s internal year loop already handles a range.
+
+**Take care with `NEXT[]`.** With the normal `config/varsets.sh`, a job
+that finishes resubmits the next varset in its chain (`NEXT[]`, §8), and
+that chain keeps going year by year until `year_lim`. That is what you
+want for a production run, but not for a one-off extraction: you would
+start a whole stream, not one job.
+
+For one-off or multi-year extractions, use the no-chaining config,
+**`config/varsets_single.sh`**. It has the same varsets, time limits and
+memory, but `NEXT[]` is empty, so every job processes its years, archives
+them, and stops. To use it, keep a copy of the chained file and put the
+single one in its place:
 
 ```bash
-# Process 2001-2005 in one job, no auto-chained follow-up job
-./submit.sh --job-name=wrf-out --time=18:00:00 --mem=8G \
-       --output=wrf-out.%j.out --error=wrf-out.%j.out \
-       run_out_generic.sh 20010101 20051231 2000 out
+cd $ROOT_DIR    # the repo
+cp config/varsets.sh        config/varsets_chain.sh   # keep the original
+cp config/varsets_single.sh config/varsets.sh         # no chaining from now on
 ```
 
-(Previously this required commenting out lines in every `run_out*.sh` file
-by hand; now it's just a parameter choice.)
+and to go back to production runs:
+
+```bash
+cp config/varsets_chain.sh config/varsets.sh
+```
+
+Every job reads `config/varsets.sh` when it **starts**, so only switch when
+no chained jobs are queued or running — otherwise those streams stop at
+their next link.
+
+Then submit the varset directly. The `TIME[]` limits are for **one** model
+year, so scale `--time` to the number of years yourself (and stay within the
+queue's maximum walltime — split long periods into several jobs):
+
+```bash
+# Process 2001-2005 of soil in one job (~5h per year -> 5 x 5h, plus margin)
+./submit.sh --job-name=wrf-soil --time=32:00:00 --mem=8G \
+       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
+       run_out_generic.sh 20010101 20051231 2005 soil
+```
+
+`run_analysis.sh` works with `varsets_single.sh` too, but its `ORDER` is
+empty by default: without chaining, everything listed runs at once, so
+uncomment one of the two batches in the file (10 varsets each) and keep
+each job to one year.
+
+(Without switching files, setting `year_lim` to a year **before** the start
+year also stops the chaining, since the resubmission check
+`yeari <= year_lim` is then false — but that is easy to get wrong, and a
+mistake starts a full chain.)
 
 ## 11. Adding/changing a variable set
 
@@ -378,7 +413,7 @@ declare -A TIME=(
 )
 ```
 
-Add it to `ORDER` if it should be submitted directly by `run_Analysis_v2.sh`,
+Add it to `ORDER` if it should be submitted directly by `run_analysis.sh`,
 to `NEXT[]` if some varset should chain into (or from) it, and to
 `ADVANCE_YEAR[]=1` if it should advance the year before resubmitting.
 If its jobs need more than the default 8G of memory, add a `MEM[]` entry

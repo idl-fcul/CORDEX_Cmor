@@ -215,6 +215,6 @@ declare -A NEXT=(
   [teste]="teste"
 )
 
-# The set (and order) run_Analysis_v2.sh submits directly — the first link
+# The set (and order) run_analysis.sh submits directly — the first link
 # of each stream (the rest of each chain is reached via NEXT).
 ORDER=(plev_uava zlev_uava0 zlev_uava1 cloud1 cloud2 plev_zg plev_ta rad plev_wa plev_hus)

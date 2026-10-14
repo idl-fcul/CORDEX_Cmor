@@ -22,7 +22,7 @@ jobs:
           shellcheck -S error \
             scripts/run_out_generic.sh \
             scripts/run_cp_generic.sh \
-            scripts/run_Analysis_v2.sh \
+            scripts/run_analysis.sh \
             scripts/report_walltimes.sh \
             config/varsets.sh \
             config/lint_varsets.sh \
