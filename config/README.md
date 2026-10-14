@@ -86,15 +86,15 @@ scheduling/chaining or not:
   membership) keeps working unchanged.
 - **Add a new, smaller varset:** give it its own entry, e.g.
   `[my_few]="RCM_sfc_VAR:tas,pr"`, plus a `TIME[my_few]` entry (required —
-  it's read either by your own manual `sbatch --time=...` or, if something
+  it's read either by your own manual `submit.sh --time=...` or, if something
   chains into it, by the resubmitting script via `TIME[$next]`). You do
   **not** need to add it to `ORDER` or `NEXT[]` if you're only ever going
   to submit it manually:
 
   ```bash
-  sbatch --job-name=wrf-my_few --time=04:00:00 --mem=8G \
+  $ROOT_DIR/submit.sh --job-name=wrf-my_few --time=04:00:00 --mem=8G \
          --output=wrf-my_few.%j.out --error=wrf-my_few.%j.out \
-         $ROOT_DIR/scripts/run_out_generic.sh 19900101 19901231 2000 my_few
+         run_out_generic.sh 19900101 19901231 2000 my_few
   ```
 
   `CP_TIME[my_few]` and `MEM[my_few]` are optional (they fall back to
