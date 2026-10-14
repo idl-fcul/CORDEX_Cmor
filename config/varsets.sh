@@ -100,6 +100,19 @@ declare -A TIME=(
 # which just changed what they cover.
 
 #----------------------------------------------------------------
+# MEM[name] — --mem for this varset's processing job
+# (run_out_generic.sh). Varsets not listed fall back to DEFAULT_MEM.
+# Use Slurm's --mem syntax (e.g. 8G, 16G, 32000M).
+# The zlev_uava programs need more than the default.
+#----------------------------------------------------------------
+DEFAULT_MEM="8G"
+declare -A MEM=(
+  [zlev_uava0]="16G"
+  [zlev_uava1]="16G"
+  [teste]="16G"
+)
+
+#----------------------------------------------------------------
 # CP_TIME[name] — walltime for this varset's archive/copy job
 # (run_cp_generic.sh).
 #----------------------------------------------------------------

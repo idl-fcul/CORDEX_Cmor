@@ -21,7 +21,7 @@
 #
 # Usage (ROOT_DIR must be exported first — see README.md):
 #   export ROOT_DIR=/path/to/this/repo
-#   sbatch --job-name=wrf-<varset> --time=<hh:mm:ss> \
+#   sbatch --job-name=wrf-<varset> --time=<hh:mm:ss> --mem=<size> \
 #          --output=wrf-<varset>.%j.out --error=wrf-<varset>.%j.out \
 #          $ROOT_DIR/scripts/run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>
 #
@@ -29,7 +29,7 @@
 # tells this script (and everything it chains to) where the actual code,
 # config, and env.site.sh live; it does not need to match your cwd.
 #
-# (--job-name / --time / --output / --error on the command line override
+# (--job-name / --time / --mem / --output / --error on the command line override
 #  the #SBATCH defaults above, so you don't need a separate file per
 #  varset just to change those.)
 #
@@ -228,7 +228,7 @@ if [ -n "${next}" ] && [ "$chain_ok" = "1" ]; then
     next_datebeg=$(( yeari + 1 ))
     next_dateend=$(( yearf + 1 ))
   fi
-  ${REPO_DIR}/submit.sh --job-name="wrf-${next}" --time="${TIME[$next]}" \
+  ${REPO_DIR}/submit.sh --job-name="wrf-${next}" --time="${TIME[$next]}" --mem="${MEM[$next]:-$DEFAULT_MEM}" \
          --output="wrf-${next}.%j.out" --error="wrf-${next}.%j.out" \
          "run_out_generic.sh" "${next_datebeg}" "${next_dateend}" "${year_lim}" "${next}"
 fi

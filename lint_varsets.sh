@@ -82,6 +82,11 @@ for vs in "${!CP_TIME[@]}"; do
     err "CP_TIME[$vs] is set but '$vs' is not in VARSETS[]."
   fi
 done
+for vs in "${!MEM[@]}"; do
+  if [ -z "${VARSETS[$vs]+x}" ]; then
+    err "MEM[$vs] is set but '$vs' is not in VARSETS[]."
+  fi
+done
 
 # ------------------------------------------------------------------
 # 5. Every varset in ORDER exists, and isn't only an archive-only entry.
