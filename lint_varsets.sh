@@ -1,41 +1,27 @@
 #!/bin/bash
 #
-# config/lint_varsets.sh
-#
-# Static consistency check for config/varsets.sh — catches exactly the kind
-# of drift that's easy to introduce by hand: a NEXT[]/CP_EXTRA[] pointing at
-# a varset that doesn't exist, a VARSETS[] entry with no TIME[], or a
-# program/variable referenced there with no matching source/header file on
-# disk. Pure static analysis — no Slurm, no compiler, no env.site.sh needed.
-# Run it locally before submitting, or via CI (see .github/workflows/).
-#
-# Usage: config/lint_varsets.sh   (run from anywhere; finds its own repo root)
-#
-# Exit status: 0 if clean, 1 if any error-level issue found.
+# lint_varsets.sh — consistency check of config/varsets.sh (no Slurm needed).
+# Usage: bash lint_varsets.sh    (exit 1 if any error)
+# See README.md §12.
+#----------------------------------------------------------------
 
 set -uo pipefail
 
+#--- Load config/varsets.sh -------------------------------------
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-REPO_DIR="$(dirname -- "${SCRIPT_DIR}")"
+REPO_DIR="${SCRIPT_DIR}"
 
 # shellcheck source=/dev/null
 source "${REPO_DIR}/config/varsets.sh"
 
+#--- Counters ---------------------------------------------------
 errors=0
 warnings=0
 
 err()  { echo "ERROR: $*" >&2; errors=$((errors + 1)); }
 warn() { echo "WARN:  $*" >&2; warnings=$((warnings + 1)); }
 
-# ------------------------------------------------------------------
-# 1. Every VARSETS[] key that's actually *processed* (in ORDER, or a
-#    target of some NEXT[] chain) needs a TIME[] entry, since
-#    run_out_generic.sh/submit.sh read TIME[$vs] to set --time when
-#    submitting or resubmitting it. Archive-only entries (e.g. plev_ua,
-#    reactivated purely for CP_EXTRA[]) are never submitted as their own
-#    processing job, so they're exempt — same rule config/README.md
-#    documents for a varset you only ever submit manually yourself.
-# ------------------------------------------------------------------
+#--- 1. Processed varsets have a TIME[] entry -------------------
 declare -A processed=()
 for vs in "${ORDER[@]}"; do processed[$vs]=1; done
 for vs in "${!NEXT[@]}"; do processed["${NEXT[$vs]}"]=1; done
@@ -46,9 +32,7 @@ for vs in "${!VARSETS[@]}"; do
   fi
 done
 
-# ------------------------------------------------------------------
-# 2. Every NEXT[] value points at a real VARSETS[] key.
-# ------------------------------------------------------------------
+#--- 2. NEXT[] entries name real varsets ------------------------
 for vs in "${!NEXT[@]}"; do
   target="${NEXT[$vs]}"
   if [ -z "${VARSETS[$target]+x}" ]; then
@@ -59,9 +43,7 @@ for vs in "${!NEXT[@]}"; do
   fi
 done
 
-# ------------------------------------------------------------------
-# 3. Every CP_EXTRA[] value points at a real VARSETS[] key.
-# ------------------------------------------------------------------
+#--- 3. CP_EXTRA[] entries name real varsets --------------------
 for vs in "${!CP_EXTRA[@]}"; do
   target="${CP_EXTRA[$vs]}"
   if [ -z "${VARSETS[$target]+x}" ]; then
@@ -69,9 +51,7 @@ for vs in "${!CP_EXTRA[@]}"; do
   fi
 done
 
-# ------------------------------------------------------------------
-# 4. Every ADVANCE_YEAR[]/CP_TIME[] key is a real varset (typo guard).
-# ------------------------------------------------------------------
+#--- 4. ADVANCE_YEAR[]/CP_TIME[]/MEM[] keys are real varsets ----
 for vs in "${!ADVANCE_YEAR[@]}"; do
   if [ -z "${VARSETS[$vs]+x}" ]; then
     err "ADVANCE_YEAR[$vs] is set but '$vs' is not in VARSETS[]."
@@ -88,19 +68,14 @@ for vs in "${!MEM[@]}"; do
   fi
 done
 
-# ------------------------------------------------------------------
-# 5. Every varset in ORDER exists, and isn't only an archive-only entry.
-# ------------------------------------------------------------------
+#--- 5. ORDER entries are real varsets --------------------------
 for vs in "${ORDER[@]}"; do
   if [ -z "${VARSETS[$vs]+x}" ]; then
     err "ORDER contains '$vs', which is not in VARSETS[]."
   fi
 done
 
-# ------------------------------------------------------------------
-# 6. Every program pattern referenced resolves to an actual .f90 file,
-#    for every variable it would be substituted with.
-# ------------------------------------------------------------------
+#--- 6. Every program has an .f90 file, every variable a header -
 for vs in "${!VARSETS[@]}"; do
   IFS=';' read -r -a groups <<< "${VARSETS[$vs]}"
   for group in "${groups[@]}"; do
@@ -120,17 +95,14 @@ for vs in "${!VARSETS[@]}"; do
   done
 done
 
-# ------------------------------------------------------------------
-# 7. Informational only: varsets with no CP_TIME[] fall back to
-#    DEFAULT_CP_TIME — not an error, but worth surfacing so it's a
-#    deliberate choice rather than an oversight.
-# ------------------------------------------------------------------
+#--- 7. Warning: varsets using DEFAULT_CP_TIME ------------------
 for vs in "${!VARSETS[@]}"; do
   if [ -z "${CP_TIME[$vs]+x}" ]; then
     warn "VARSETS[$vs] has no CP_TIME[$vs] — archiving will use DEFAULT_CP_TIME=${DEFAULT_CP_TIME:-<unset>}."
   fi
 done
 
+#--- Summary ----------------------------------------------------
 echo
-echo "config/lint_varsets.sh: ${errors} error(s), ${warnings} warning(s)."
+echo "lint_varsets.sh: ${errors} error(s), ${warnings} warning(s)."
 [ "${errors}" -eq 0 ]

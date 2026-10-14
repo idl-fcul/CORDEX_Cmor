@@ -1,35 +1,17 @@
 #!/bin/bash
 #
-# scripts/run_cp_generic.sh
-#
-# Generic replacement for run_cp_out.sh and its siblings. Archives every
-# variable belonging to <varset> (config/varsets.sh) to ECFS and a remote
-# server. Variable names come straight from config/varsets.sh, so this
-# always matches what run_out_generic.sh just produced for that varset —
-# no separate variable list to keep in sync.
-#
-# No #SBATCH lines and nothing site-specific in this file: --qos /
-# --nodes / --ntasks / --hint / --account / --mail-type / --mail-user /
-# --chdir all come from env.site.sh (JOB_* settings), passed in by
-# submit.sh.
-#
-# Usage:
-#   ./submit.sh --job-name=cp-<varset> --time=<hh:mm:ss> \
-#          --output=cp-<varset>.%j.out --error=cp-<varset>.%j.out \
-#          run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
-#
-# Normally you don't call this directly — run_out_generic.sh submits it
-# automatically after processing each varset.
+# scripts/run_cp_generic.sh — archive one varset's output to ECFS and the remote server.
+# Usage: ./submit.sh [sbatch options] run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
+# Normally submitted by run_out_generic.sh. See README.md §7.
 #----------------------------------------------------------------
 
 set -x
 
-# ROOT_DIR is set by submit.sh (from its own location) and passed into the
-# job. It can't be worked out here from $0, because Slurm runs a spooled
-# copy of this script, not the file in the repo.
+#--- Repo location (set by submit.sh) ---------------------------
 : "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §10)}"
 REPO_DIR="${ROOT_DIR}"
 
+#--- Arguments --------------------------------------------------
 datebeg=$1
 dateend=$2
 year_lim=$3
@@ -40,17 +22,9 @@ if [ -z "${VARSET}" ]; then
   exit 1
 fi
 
-#----------------------------------------------------------------
-#                          ENVIRONMENT                            |
-#----------------------------------------------------------------
-# site/user-specific modules & remote host for the archive step -> env.site.sh
+#--- Environment: site, experiment, varsets ---------------------
 source "${REPO_DIR}/env.site.sh"
-
-# experiment: grids, and per grid the output dir and archive paths
-# -> experiments/${EXPERIMENT}/${EXPERIMENT}.sh
 source "${REPO_DIR}/scripts/load_experiment.sh"
-
-# variable-set definitions -> config/varsets.sh
 source "${REPO_DIR}/config/varsets.sh"
 
 if [ -z "${VARSETS[$VARSET]+x}" ]; then
@@ -59,14 +33,13 @@ if [ -z "${VARSETS[$VARSET]+x}" ]; then
   exit 1
 fi
 
+#--- Modules for the archive step -------------------------------
 # shellcheck disable=SC2086
 module load ${CP_MODULES}
 
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${NETCDF4_DIR}/lib"
 
-# Flatten every group in this varset into one plain variable list — the
-# program pattern doesn't matter for archiving, only the variable name
-# (it's the output file prefix, "<var>_*.nc").
+#--- Variable list (all groups of the varset) -------------------
 IFS=';' read -r -a groups <<< "${VARSETS[$VARSET]}"
 var=()
 for group in "${groups[@]}"; do
@@ -74,9 +47,7 @@ for group in "${groups[@]}"; do
   var+=("${group_vars[@]}")
 done
 
-#----------------------------------------------------------------
-#                        Processing                               |
-#----------------------------------------------------------------
+#--- Years ------------------------------------------------------
 date
 
 echo "$datebeg"
@@ -87,8 +58,7 @@ echo "$yeari"
 yearf=$(echo "$dateend" | cut -c1-4)
 echo "$yearf"
 
-# Each grid has its own output directory and its own archive paths
-# (experiments/${EXPERIMENT}/${EXPERIMENT}.sh), so archive grid by grid.
+#--- Archive, grid by grid (ECFS, then remote) ------------------
 for grid in "${GRIDS[@]}"; do
   echo "Archiving grid ${grid}: ${OUTPUT_DIR[$grid]} -> ${ECFS_BASE[$grid]}, ${REMOTE_HOST}:${REMOTE_BASE[$grid]}"
   cd "${OUTPUT_DIR[$grid]}" || exit 1

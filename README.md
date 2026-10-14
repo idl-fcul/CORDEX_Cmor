@@ -150,15 +150,21 @@ cp env.site.sh.example env.site.sh
   [§7, Archiving](#7-archiving)). The archive *paths* are per grid, in the
   experiment file.
 
-`env.site.sh` is gitignored — it never gets committed.
-
 * **Slurm job settings** — `JOB_QOS`, `JOB_NODES`, `JOB_NTASKS`,
   `JOB_HINT`, `JOB_ACCOUNT`, `JOB_MAIL_TYPE`, `JOB_MAIL_USER`,
   `JOB_CHDIR`. `submit.sh` passes them to every job as `--qos` /
   `--nodes` / `--ntasks` / `--hint` / `--account` / `--mail-type` /
   `--mail-user` / `--chdir` (see
-  [§6](#6-submission-scripts-scripts-folder)). Leave one empty to not pass
-  that flag.
+  [§6](#6-submission-scripts-scripts-folder)). Leave one empty (`""`) to
+  not pass that flag. A line missing from `env.site.sh` altogether uses
+  the default: `nf`, `1`, `1`, `nomultithread`, no account, `ALL`, no
+  mail user, no chdir.
+
+`env.site.sh` is gitignored — it never gets committed. Lines an older
+`env.site.sh` may still have for per-experiment settings (`run`,
+`DOMAIN_ID`, `OUTPUT_DIR`, `OUTPUT_WRF`, `CP_RUN_DIR`, `ECFS_BASE`,
+`REMOTE_BASE`, `HEADER_INI_DIR`) are ignored — the experiment folder's
+values are used instead.
 
 ## 5. Variable Sets (`config/varsets.sh`)
 
@@ -189,18 +195,22 @@ program pattern:
 ```
 
 `VAR` in a program pattern gets substituted with the current variable; a
-pattern without `VAR` is used as-is for every variable in that group.
-Per-variable programs turn out to be **the exception, not the rule** once
-you include plev/zlev:
+pattern without `VAR` is used as-is for every variable in that group:
 
-- **sfc**: mostly per-variable (`RCM_sfc_<var>`) — `out`, `soil`, `snw`,
-  `tau`, `wpth`. But `cloud` → always `RCM_sfc_cloud`, `wxtrm` → always
-  `RCM_sfc_xtrm`, and `rad` → always `RCM_sfc_rad` (14 radiation variables,
-  one fixed program).
-- **plev**: always one fixed program per family, covering every pressure
-  level in one program (`RCM_plev_ta.f90` handles `ta1000`...`ta30`).
-- **zlev**: same — one fixed program per family, covering every height
-  level (`RCM_zlev_ua.f90` handles `ua50m`, `ua100m`, `ua150m`, ...).
+- **sfc**: mostly per-variable (`RCM_sfc_<var>`) — `out1`, `out2`, `soil`,
+  `snw`, `wpth*`. But `cloud*` → always `RCM_sfc_cloud`, `wxtrm` → always
+  `RCM_sfc_xtrm`, and `rad` → always `RCM_sfc_rad`.
+- **plev** / **zlev**: one fixed program per family (`RCM_plev_ta.f90`
+  handles `ta1000` ... `ta30`).
+
+Either way, `run_out_generic.sh` runs the program **once per variable (or
+level)**, and each run is an independent pass over the year's WRF files.
+So any varset can be split between variables or levels — a single
+variable or level is the smallest unit.
+
+The one name that matters: the varset that runs `RCM_sfc_xtrm` must be
+called **`wxtrm`** (or `testex`) — `run_out_generic.sh` reads the
+`wrfxtrm` files instead of `wrfout` only for those names.
 
 `plev_uava` and `zlev_uava0`/`zlev_uava1` process `ua`and `va` variables through a
 program literally named `RCM_plev_uava` / `RCM_zlev_uava` — that's how the
@@ -253,6 +263,36 @@ Per-job settings (`--job-name`, `--time`, `--mem`, `--output`) come from
 
 The 3 scripts are fully generic — you should not need to edit them.
 
+**What `submit.sh` does**, for every job:
+
+1. Works out `ROOT_DIR` from its own location (symlinks resolved).
+2. Splits its arguments into `sbatch` options (anything starting with
+   `-`) and the script name plus that script's arguments.
+3. Reads `env.site.sh` in a subshell and keeps only the `JOB_*` values
+   and `EXPERIMENT` — so the modules and compiler settings in
+   `env.site.sh` don't leak into the job's environment.
+4. Checks the experiment folder exists, then passes `ROOT_DIR` and the
+   experiment (as `CMOR_EXPERIMENT`, §2) to the job.
+5. Calls `sbatch` with the `JOB_*` flags first and your own flags after,
+   skipping any `JOB_*` flag you already gave, so your flags win.
+
+**What a processing job (`run_out_generic.sh`) does:**
+
+1. Loads `env.site.sh`, the experiment (`scripts/load_experiment.sh`,
+   which also checks it — §2) and `config/varsets.sh`.
+2. For each year, then each grid, then each group and variable of the
+   varset: builds the namelist (the grid's ini file with its placeholders
+   filled in, plus `header/header_<var>`), compiles the program and runs it
+   in `${ROOT_RUN_DIR}/<varset>`.
+3. Submits the archive job (§7), and a second one for its `CP_EXTRA[]`
+   companion.
+4. Submits the next varset of its stream (§8).
+
+**Arguments:** `run_out_generic.sh` and `run_cp_generic.sh` take
+`<datebeg> <dateend> <year_lim> <varset>`; `run_analysis.sh` takes
+`<datebeg> <dateend> <year_lim>` and submits every `ORDER` entry, 120 s
+apart.
+
 ## 7. Archiving
 
 After processing each varset, `run_out_generic.sh` unconditionally submits
@@ -283,8 +323,8 @@ to its own paths.
 Each varset's year loop resubmits another varset when it finishes (`NEXT[]`
 in `config/varsets.sh`). The varsets are arranged in 10 parallel
 "streams", balanced on measured run times so each takes about the same
-time per model year (~21h) — the table at the top of `config/varsets.sh`
-lists them:
+time per model year (~21h) — [`config/README.md`](config/README.md)
+has the full table:
 
 - **2-hop chains**: `plev_uava→wxtrm`, `cloud1→wpth1`, `cloud2→wpth3`,
   `plev_zg→snw`, `plev_ta→wpth2`, `rad→out1`
@@ -295,6 +335,13 @@ lists them:
 advances `yeari`/`yearf` (`ADVANCE_YEAR[]`) — the last one before the
 chain returns to its first link — so each stream advances one year per
 full round-trip, not per hop.
+
+`year_lim` decides when a stream stops:
+
+- the **advancing** link only resubmits if `yeari < year_lim`, so it runs
+  `year_lim` once and then stops instead of starting `year_lim + 1`;
+- the **other** links resubmit while `yeari <= year_lim`, so they always
+  run `year_lim` too — the advancing link is the one that ends the stream.
 
 To rebalance (e.g. after run times change), run `report_walltimes.sh` and
 move variables between varsets: every program runs once per variable or
@@ -461,6 +508,63 @@ to `NEXT[]` if some varset should chain into (or from) it, and to
 If its jobs need more than the default 8G of memory, add a `MEM[]` entry
 (e.g. `[my_new_set]="16G"`); otherwise it uses `DEFAULT_MEM`.
 
+## 12. Helper scripts
+
+### `report_walltimes.sh` — longest run per varset
+
+Pulls real run times from Slurm's accounting (`sacct`) for the jobs this
+pipeline has submitted (`wrf-<varset>` / `cp-<varset>`), so you can check
+the limits in `config/varsets.sh` against real runs. It only reports; it
+never edits anything.
+
+Run it **directly on an HPC login node, not through `sbatch`** (it can be
+a symlink, e.g. in `$SCRATCH` — the config is found next to the real file):
+
+```bash
+bash report_walltimes.sh --since 2026-08-01
+```
+
+| Option | Meaning | Default |
+|---|---|---|
+| `--since` | `sacct` start time, e.g. `2026-08-01` or `now-30days` | `now-30days` |
+| `--margin` | percent added to the longest run for the suggestion | `25` |
+| `--clusters` | `sacct -M` value, e.g. `ac` or `ac,ad` | `all` |
+
+It searches **all** clusters by default: ECMWF's Atos HPC is split into
+several clusters (aa/ab/ac/ad), and `sacct` otherwise only sees the login
+node's own. It uses top-level jobs only (`sacct -X`).
+
+Per job name it prints the number of completed runs, the longest one
+(`MaxElapsed`), a suggested limit (longest + margin), the limit set in
+`config/varsets.sh` (`TIME[]` for `wrf-*`, `CP_TIME[]`/`DEFAULT_CP_TIME`
+for `cp-*`) and the clusters used. Notes flag **LIMIT TOO SHORT** (the
+longest run already exceeded the limit), **tight** (less than the margin
+to spare), and jobs that only timed out, ran out of memory, failed or were
+cancelled. A job that hit its time limit needed *more* than its limit, so
+it is flagged rather than measured.
+
+### `lint_varsets.sh` — check `config/varsets.sh`
+
+A quick consistency check, no Slurm or compiler needed:
+
+```bash
+bash lint_varsets.sh     # exit status 1 if any error
+```
+
+It reports an **error** if:
+
+1. a processed varset (in `ORDER` or a `NEXT[]` target) has no `TIME[]`
+   entry — archive-only entries are exempt;
+2. a `NEXT[]` entry names, or belongs to, a varset that doesn't exist;
+3. a `CP_EXTRA[]` entry names a varset that doesn't exist;
+4. an `ADVANCE_YEAR[]`, `CP_TIME[]` or `MEM[]` key isn't a varset (typo);
+5. an `ORDER` entry isn't a varset;
+6. a program has no `f90_src/<program>.f90`, or a variable has no
+   `header/header_<var>`;
+
+and a **warning** for every varset without its own `CP_TIME[]` (it uses
+`DEFAULT_CP_TIME`).
+
 ## Notes / things to double check before first real run
 
 - The compile step (Fortran module + subs + program) still runs once per
@@ -469,17 +573,12 @@ If its jobs need more than the default 8G of memory, add a `MEM[]` entry
   repeatedly for each variable/level in its group. Harmless, just matches
   the original's per-variable compile pattern.
 - Scripts use `#!/bin/bash` explicitly (not `#!/bin/sh`) since they rely on
-  bash associative arrays — the originals already used bash-only syntax
-  under a `#!/bin/sh` shebang, which only worked if `/bin/sh` happened to be
-  bash on your system. This makes that assumption explicit and portable.
-- `TIME[]` values for `out` and `plev_ta` were confirmed against the live
-  scripts; the rest are carried over/estimated and worth a check — `rad`
-  and `snw` especially, since what they cover just changed.
-- `CP_TIME[]` (archive-step walltime) is only confirmed for `out`
-  (`20:00:00`, from the live `run_cp_out.sh`); everything else falls back
-  to `DEFAULT_CP_TIME` (`04:00:00`) until you've checked real numbers.
-- `plev_va`, `zlev_va0`, `zlev_va1` are disabled on purpose (old/superseded
-  versions) — commented out at the bottom of `config/varsets.sh` rather
-  than deleted, so they're easy to compare against or resurrect.
-  `plev_ua`, `zlev_ua0`, `zlev_ua1` are also disabled *for processing*, but
-  reactivated as archive-only `VARSETS[]` entries (see §7, above).
+  bash associative arrays.
+- Several `TIME[]` values are estimates (out1, out2, zlev_uava0/1 and the
+  split varsets — see [`config/README.md`](config/README.md)). Run
+  `report_walltimes.sh` after the first full year and adjust.
+- `CP_TIME[]`: the longest archive job measured is `cp-out1` at 1h31;
+  every varset currently uses 20h.
+- `plev_ua`, `zlev_ua0`, `zlev_ua1` are archive-only `VARSETS[]` entries
+  (§7); `cloud`, `tau`, `zlev_va0`, `zlev_va1` are kept for manual runs
+  only.

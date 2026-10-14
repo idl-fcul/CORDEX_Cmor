@@ -1,32 +1,14 @@
 #!/bin/bash
 #
-# report_walltimes.sh
-#
-# Most TIME[]/CP_TIME[] values in config/varsets.sh are estimates carried
-# over from the original per-variable scripts, not measured against the
-# generic pipeline. This script pulls real elapsed times from `sacct` for
-# jobs this pipeline has already submitted (job names "wrf-<varset>" /
-# "cp-<varset>", per submit.sh) and, per varset, prints:
-#
-#   - the longest COMPLETED run (MaxElapsed),
-#   - a suggested limit (MaxElapsed + margin),
-#   - the limit currently configured in config/varsets.sh, and
-#   - a flag where the configured limit looks too short.
-#
-# It only reports; it never edits config/varsets.sh.
-#
-# Usage (run directly on an HPC login node — NOT through sbatch):
-#   bash report_walltimes.sh [--since <date>] [--margin <percent>] [--clusters <list>]
-#
-#   --since     sacct start time, e.g. 2026-08-01 or now-30days (default: now-30days)
-#   --margin    percent added to MaxElapsed for the suggestion   (default: 25)
-#   --clusters  sacct -M value, e.g. ac or ac,ad                 (default: all clusters)
-#
-# Works through a symlink (e.g. one in $SCRATCH): the config is found next
-# to the real file, not the link.
+# report_walltimes.sh — longest completed run per varset, from sacct.
+# Usage (on a login node, not via sbatch):
+#   bash report_walltimes.sh [--since <date>] [--margin <percent>] [--clusters <list|all>]
+# See README.md §12.
+#----------------------------------------------------------------
 
 set -euo pipefail
 
+#--- Options ----------------------------------------------------
 since="now-30days"
 margin=25
 clusters="all"
@@ -49,15 +31,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+#--- Requirements -----------------------------------------------
 if ! command -v sacct >/dev/null 2>&1; then
   echo "ERROR: sacct not found — run this on an HPC login node with Slurm accounting enabled." >&2
   exit 1
 fi
 
-# ------------------------------------------------------------------
-# Load the configured limits, if config/varsets.sh can be found next to
-# the real (symlink-resolved) location of this script.
-# ------------------------------------------------------------------
+#--- Configured limits (config/varsets.sh next to this file) -----
 SCRIPT_DIR="$(cd -- "$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")" &>/dev/null && pwd)"
 config="${SCRIPT_DIR}/config/varsets.sh"
 have_config=0
@@ -69,6 +49,7 @@ else
   echo "NOTE: ${config} not found — skipping the comparison with configured limits." >&2
 fi
 
+#--- Helpers ----------------------------------------------------
 # [DD-]HH:MM:SS -> seconds
 to_secs() {
   local t="$1" d=0 h m s
@@ -86,8 +67,7 @@ to_hms() {
   printf '%02d:%02d:%02d' $(( x / 3600 )) $(( (x % 3600) / 60 )) $(( x % 60 ))
 }
 
-# Configured limit for a job name ("wrf-x" -> TIME[x], "cp-x" -> CP_TIME[x]
-# or DEFAULT_CP_TIME). Prints nothing if unknown.
+# Configured limit for a job name (wrf-x -> TIME[x], cp-x -> CP_TIME[x])
 configured_limit() {
   local jobname="$1" vs
   [ "${have_config}" = "1" ] || return 0
@@ -97,17 +77,14 @@ configured_limit() {
   esac
 }
 
-# ------------------------------------------------------------------
-# Collect: longest COMPLETED run per job name, run count, the cluster(s)
-# it ran on, and any non-COMPLETED states (TIMEOUT most importantly).
-# ------------------------------------------------------------------
+#--- Collect runs from sacct (all clusters, top-level jobs) ------
 declare -A max_elapsed=()
 declare -A job_count=()
 declare -A other_states=()
 declare -A seen_clusters=()
 
 while IFS='|' read -r jobname state elapsed cluster; do
-  # Only our own varset jobs (wrf-* / cp-*, per submit.sh's --job-name).
+  # Only pipeline jobs (wrf-* / cp-*)
   [[ "${jobname}" == wrf-* || "${jobname}" == cp-* ]] || continue
 
   case ",${seen_clusters[$jobname]:-}," in
@@ -115,7 +92,7 @@ while IFS='|' read -r jobname state elapsed cluster; do
     *) seen_clusters[$jobname]="${seen_clusters[$jobname]:-}${seen_clusters[$jobname]:+,}${cluster}" ;;
   esac
 
-  # sacct reports e.g. "CANCELLED by 1234" — keep just the state word.
+  # "CANCELLED by 1234" -> "CANCELLED"
   state="${state%% *}"
   if [ "${state}" = "COMPLETED" ]; then
     secs="$(to_secs "${elapsed}")"
@@ -129,16 +106,11 @@ while IFS='|' read -r jobname state elapsed cluster; do
       *) other_states[$jobname]="${other_states[$jobname]:-}${other_states[$jobname]:+,}${state}" ;;
     esac
   fi
-# -X: top-level jobs only (no .batch/.extern steps).
-# -M: ECMWF's Atos HPC is split into several clusters (aa/ab/ac/ad), and
-#     sacct only sees the login node's own cluster unless told otherwise.
 done < <(sacct -n -P -X -M "${clusters}" -S "${since}" \
               -o JobName,State,Elapsed,Cluster \
               --state=COMPLETED,TIMEOUT,FAILED,CANCELLED,OUT_OF_MEMORY)
 
-# ------------------------------------------------------------------
-# Report
-# ------------------------------------------------------------------
+#--- Report -----------------------------------------------------
 echo "# Walltimes observed since ${since} on cluster(s): ${clusters} (margin: +${margin}%)"
 echo "# MaxElapsed is the longest COMPLETED run. A job that hit its time limit"
 echo "# (TIMEOUT) needed MORE than its limit — those are flagged, not measured."
