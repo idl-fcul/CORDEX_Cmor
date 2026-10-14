@@ -26,5 +26,6 @@ jobs:
             scripts/load_experiment.sh \
             experiments/*/*.sh \
             config/varsets.sh \
+            config/varsets_chain.sh \
             config/varsets_single.sh \
             env.site.sh.example

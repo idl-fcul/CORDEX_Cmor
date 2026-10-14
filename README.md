@@ -22,8 +22,8 @@ the provided folder structure:
 ```
 f90_src/       <- Fortran source (RCM_sfc_*.f90, RCM_plev_*.f90, RCM_zlev_*.f90, ...)
 header/        <- per-variable namelist headers
-config/        <- varsets.sh: the single source of truth for variables/programs/scheduling (see config/README.md);
-                  varsets_single.sh: every varset loops on itself (§10)
+config/        <- varsets.sh: the active variables/programs/scheduling, the only one the scripts read (see config/README.md);
+                  varsets_chain.sh: saved copy of the chained streams (§8); varsets_single.sh: every varset loops on itself (§10)
 experiments/   <- one folder per experiment: <name>.sh (grids, paths) + its ini files (§2, experiments/README.md)
 scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they source)
 env.site.sh.example, LICENSE, README.md, MIGRATION.md
@@ -245,10 +245,11 @@ per-variable files:
 `#SBATCH` lines are read by `sbatch` before a script starts, so a script
 can't load them from a file itself; instead every job is submitted through
 `submit.sh`, which reads these values from `env.site.sh` and passes them
-on the `sbatch` command line. Per-job settings (`--job-name`, `--time`,
-`--mem`, `--output`) come from `config/varsets.sh`. That includes the jobs the scripts
-submit for each other, so **submit your first job through `submit.sh`
-too** (§10) — a job started with plain `sbatch` won't get these settings.
+on the `sbatch` command line. That includes the jobs the scripts submit
+for each other, so **submit your first job through `submit.sh` too**
+(§10) — a job started with plain `sbatch` won't get these settings.
+Per-job settings (`--job-name`, `--time`, `--mem`, `--output`) come from
+`config/varsets.sh`.
 
 The 3 scripts are fully generic — you should not need to edit them.
 
@@ -397,13 +398,18 @@ To run varsets on their own, use **`config/varsets_single.sh`**. It has
 the same varsets, time limits and memory, but every varset loops on
 itself, like `zlev_uava0` and `zlev_uava1` do: it processes one year,
 submits its archive (`cp-*`) job, and resubmits itself for the next year,
-stopping after `year_lim`. To use it, keep a copy of the chained file and
-put the single one in its place:
+stopping after `year_lim`.
+
+The scripts only read `config/varsets.sh`, so you switch by copying a
+layout over it. `config/` holds both:
+
+* `varsets_chain.sh` — the normal chained streams (§8), a saved copy of
+  what `varsets.sh` holds by default;
+* `varsets_single.sh` — every varset loops on itself.
 
 ```bash
 cd $ROOT_DIR    # the repo
-cp config/varsets.sh        config/varsets_chain.sh   # keep the original
-cp config/varsets_single.sh config/varsets.sh         # every varset loops on itself
+cp config/varsets_single.sh config/varsets.sh   # every varset loops on itself
 ```
 
 and to go back to the normal streams:
@@ -433,7 +439,9 @@ within the 11-processor limit), or list only the varsets you need.
 
 ## 11. Adding/changing a variable set
 
-Edit **only** `config/varsets.sh`:
+Edit `config/varsets.sh` — and make the same change in
+`config/varsets_chain.sh` and `config/varsets_single.sh`, so switching
+layouts (§10) doesn't lose it:
 
 ```bash
 declare -A VARSETS=(

@@ -5,6 +5,12 @@
 # Single source of truth for every "run_out_*" variant.
 # To add/remove/change a variable set, edit ONLY this file — nothing else.
 #
+# The scripts only ever read config/varsets.sh. Two saved layouts sit next
+# to it, to copy over it when needed (README.md §10):
+#   varsets_chain.sh   the chained streams (this layout, a saved copy)
+#   varsets_single.sh  every varset loops on itself, year by year
+# If you change a varset here, make the same change in both.
+#
 #----------------------------------------------------------------
 # VARSETS[name] format
 #

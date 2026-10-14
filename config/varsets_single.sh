@@ -36,9 +36,8 @@
 # varset hands over to a different one.
 #
 # How to switch (from ROOT_DIR):
-#   cp config/varsets.sh config/varsets_chain.sh     # keep the chained one
 #   cp config/varsets_single.sh config/varsets.sh    # make this the active one
-# and to switch back:
+# and to switch back to the chained streams:
 #   cp config/varsets_chain.sh config/varsets.sh
 #
 # The scripts only ever read config/varsets.sh, and every job reads it
@@ -46,8 +45,8 @@
 # running — a chained job that starts after the switch won't resubmit
 # its next link, and that stream stops.
 #
-# VARSETS/TIME/MEM/CP_* below are a copy of config/varsets.sh — if you
-# change a varset there, change it here too. Only NEXT, ADVANCE_YEAR and
+# VARSETS/TIME/MEM/CP_* below are a copy of config/varsets_chain.sh — if
+# you change a varset there, change it here too. Only NEXT, ADVANCE_YEAR and
 # ORDER differ.
 #----------------------------------------------------------------
 
