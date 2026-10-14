@@ -1,32 +1,17 @@
 #!/bin/bash
-
-# ------------------------------------------------------------------
-#  No #SBATCH lines and nothing site-specific in this file: --qos /
-#  --nodes / --ntasks / --hint / --account / --mail-type / --mail-user /
-#  --chdir all come from env.site.sh (JOB_* settings), passed in by
-#  submit.sh.
 #
-#  Run using:
-#
-#  ./submit.sh run_analysis.sh \
-#         [initial date - yyyymmdd] [final date - yyyymmdd] [loop year limit - yyyy]
-#
-#  Use submit.sh rather than plain sbatch, or the env.site.sh job
-#  settings won't be applied.
-#
-#  You can submit from anywhere (e.g. $SCRATCH/Analysis): call submit.sh by
-#  its path or through a symlink — it finds the repo itself.
-#-------------------------------------------------------------------
+# scripts/run_analysis.sh — submit the first job of every stream in ORDER.
+# Usage: ./submit.sh run_analysis.sh <datebeg yyyymmdd> <dateend yyyymmdd> <year_lim yyyy>
+# See README.md §10.
+#----------------------------------------------------------------
 
 set -x
 
-# ROOT_DIR is set by submit.sh (from its own location) and passed into the
-# job. It can't be worked out here from $0, because Slurm runs a spooled
-# copy of this script, not the file in the repo.
+#--- Repo location (set by submit.sh) ---------------------------
 : "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §10)}"
 REPO_DIR="${ROOT_DIR}"
 
-#### Load libraries used by this orchestration step only
+#--- Modules ----------------------------------------------------
 intel_v="2021.4"
 hdf5_v="1.12.2"
 ncdf_v="4.9.3"
@@ -36,6 +21,7 @@ module load prgenv/intel intel/${intel_v} hpcx-openmpi netcdf4/${ncdf_v} hdf5/${
 
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${NETCDF4_DIR}/lib"
 
+#--- Arguments --------------------------------------------------
 date
 
 datebeg=$1
@@ -45,13 +31,15 @@ year_lim=$3
 echo "$datebeg"
 echo "$dateend"
 
+#--- Varsets ----------------------------------------------------
 source "${REPO_DIR}/config/varsets.sh"
 
 if [ "${#ORDER[@]}" -eq 0 ]; then
-  echo "ORDER in config/varsets.sh is empty — nothing to submit. (With the no-chaining varsets_single.sh, uncomment one of its ORDER batches first.)" >&2
+  echo "ORDER in config/varsets.sh is empty — nothing to submit. (With varsets_single.sh, uncomment one of its ORDER batches first.)" >&2
   exit 1
 fi
 
+#--- Submit each ORDER entry, 120 s apart -----------------------
 for vs in "${ORDER[@]}"; do
   ${REPO_DIR}/submit.sh --job-name="wrf-${vs}" --time="${TIME[$vs]}" --mem="${MEM[$vs]:-$DEFAULT_MEM}" \
          --output="wrf-${vs}.%j.out" --error="wrf-${vs}.%j.out" \

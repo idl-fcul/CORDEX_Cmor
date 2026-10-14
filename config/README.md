@@ -48,6 +48,99 @@ Most varsets are a single group. `acum`'s replacement (`rad`) used to need
 two — see the git history / `MIGRATION.md` for a worked example of a
 multi-group entry.
 
+### Special entries in `VARSETS[]`
+
+- **Manual runs only** (not in any stream): `cloud`, `tau`, `zlev_va0`,
+  `zlev_va1` — now covered by `cloud1`/`cloud2`, `out2` and
+  `zlev_uava0`/`zlev_uava1`, kept for one-off runs.
+- **Archive-only**: `plev_ua`, `zlev_ua0`, `zlev_ua1`. Never processed
+  (not in `ORDER` or `NEXT[]`); they exist so `run_cp_generic.sh` can
+  archive the "u" files that `plev_uava`/`zlev_uava0`/`zlev_uava1` produce
+  alongside their "v" files — see `CP_EXTRA[]` and main README §7.
+- **`wxtrm`** must keep that name (or `testex`): only those names make
+  `run_out_generic.sh` read `wrfxtrm` instead of `wrfout`.
+
+## Current layout: 10 streams
+
+Redistributed on 2026-10-14 using the measured maximum run times (`sacct`,
+August–October 2026): 10 processing streams, leaving 1 of the 11 allowed
+processors free for archive (`cp-*`) jobs. Costs of split varsets are
+scaled per variable or level from the measured varset (e.g. cloud = 24h06
+for 4 variables → 6h02 per variable). "est" = no measured run yet.
+
+| Stream | Chain (per model year) | ~Time per year |
+|---|---|---|
+| 1 | `plev_uava` → `wxtrm` | 19h38 |
+| 2 | `zlev_uava0` (self) | 20h54 est |
+| 3 | `zlev_uava1` (self) | 20h54 est |
+| 4 | `cloud1` → `wpth1` | 20h46 |
+| 5 | `cloud2` → `wpth3` | 20h46 |
+| 6 | `plev_zg` → `snw` | 20h41 |
+| 7 | `plev_ta` → `wpth2` | 20h01 |
+| 8 | `rad` → `out1` | 20h51 (out1 est) |
+| 9 | `plev_wa` → `zlev_hus` → `zlev_ta` | 20h39 |
+| 10 | `plev_hus` → `soil` → `out2` | 20h59 (out2 est) |
+
+Changes from the 2026-08-13 layout:
+
+- `zlev_uava0`/`zlev_uava1` (16G memory) replace the separate
+  `zlev_ua0/1` + `zlev_va0/1` processing runs;
+- `cloud` (24h06, the old ceiling) split into `cloud1` + `cloud2`;
+- `wpth1` (17h25 for 2 variables) split into `wpth1` (clivi) + `wpth3`
+  (clwvi);
+- `out3` and `tau` folded into `out1`/`out2` (fewer chain hops).
+
+The slowest stream went from 28h06 per year (`plev_hus` → `wpth1`) to
+about 21h, roughly 25% faster per model year; total work is unchanged
+(~206h per year), just spread evenly. The `zlev_uava0/1` estimate is
+1.1 × `zlev_va0`, taken as its 19h limit since there's no measured run yet.
+Re-run `report_walltimes.sh` (main README §12) after the first full year
+and rebalance if these, `out1` or `out2` differ much from the estimates.
+
+## Time limits (`TIME[]`)
+
+Unchanged varsets keep their limit (all are above the measured maximum).
+New and re-split varsets get the expected run time + 4h, rounded up to the
+hour.
+
+| Varset | `TIME[]` | Basis |
+|---|---|---|
+| `out1` | 14:00 | est ~9h12 (13 variables) |
+| `out2` | 10:00 | est ~5h12 (ps, sfcWind, z0 + tau's 3h05) |
+| `soil` | 12:00 | max 5h05 |
+| `rad` | 18:00 | max 11h39 |
+| `snw` | 12:00 | max 6h06 |
+| `cloud1`, `cloud2` | 17:00 | ~12h03 each (half of cloud's 24h06) |
+| `wxtrm` | 08:00 | max 0h00m17s |
+| `wpth1`, `wpth3` | 13:00 | ~8h43 each (half of old wpth1's 17h25) |
+| `wpth2` | 10:00 | max 7h58 |
+| `plev_wa` | 22:00 | max 10h57 |
+| `plev_zg` | 22:00 | max 14h35 |
+| `plev_uava` | 28:00 | max 19h38 |
+| `plev_hus` | 18:00 | max 10h41 |
+| `plev_ta` | 18:00 | max 12h03 |
+| `zlev_hus` | 10:00 | max 4h05 |
+| `zlev_ta` | 10:00 | max 5h37 |
+| `zlev_uava0`, `zlev_uava1` | 25:00 | est ~20h54 (was 12:00 — too short) |
+| `cloud` (manual) | 28:00 | max 24h06 (was 26:00 — under 2h to spare) |
+| `tau` (manual) | 16:00 | max 3h05 |
+
+The limits are for **one** model year; with a second grid enabled (main
+README §2) every job does both grids, so raise them accordingly.
+
+`CP_TIME[]`: every varset uses 20h; the longest archive job measured is
+`cp-out1` at 1h31.
+
+## Memory (`MEM[]`)
+
+Only varsets that need more than the machine's default (8 GB per job at
+ECMWF) are listed. A program keeps the whole year of its output in memory:
+
+| | Size |
+|---|---|
+| one hourly variable, 424 × 412 × 8760 × 4 bytes | 6.1 GB (fits in 8G) |
+| `zlev_uava`: ua and va, both hourly | 12.2 GB (needs 16G) |
+
 ## How a run actually flows
 
 1. `run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>` looks up
@@ -58,7 +151,8 @@ multi-group entry.
 3. It then checks `NEXT[<varset>]`. If set, and if `yeari <= year_lim`
    (where `yeari` is derived from `datebeg`, not from the internal
    per-year loop), it resubmits itself for that next varset — advancing
-   the year first if `ADVANCE_YEAR[<varset>]=1`.
+   the year first if `ADVANCE_YEAR[<varset>]=1`. The advancing link uses
+   `yeari < year_lim` instead, so the stream stops after `year_lim`.
 
 Step 3 is what's referred to below as the "legacy loop": it reproduces the
 per-stream resubmission (`rad→out1→rad`, self-loops like `zlev_uava0`,

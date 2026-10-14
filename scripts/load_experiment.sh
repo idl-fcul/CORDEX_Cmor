@@ -1,24 +1,15 @@
 #!/bin/bash
 #
-# scripts/load_experiment.sh
-#
-# Sourced by run_out_generic.sh and run_cp_generic.sh, right after
-# env.site.sh. Loads experiments/${EXPERIMENT}/${EXPERIMENT}.sh and checks
-# that every grid in run[] has all its per-grid settings and its two ini
-# files, so a missing entry fails at the start of the job instead of
-# half-way through. Also sets EXPERIMENT_DIR, the experiment's folder,
-# where its ini files live.
-#
-# The experiment is chosen when a run is first submitted (EXPERIMENT in
-# env.site.sh, or EXPERIMENT=<name> ./submit.sh ...). submit.sh passes it
-# to every job as CMOR_EXPERIMENT, which wins over env.site.sh here — so a
-# running chain keeps its experiment even if env.site.sh changes meanwhile.
+# scripts/load_experiment.sh — load and check experiments/<name>/<name>.sh.
+# Sourced by run_out_generic.sh and run_cp_generic.sh. See README.md §2.
 #----------------------------------------------------------------
 # shellcheck disable=SC2154  # run[] etc. come from the experiment file
 
+#--- Experiment name (CMOR_EXPERIMENT from submit.sh wins) ------
 EXPERIMENT="${CMOR_EXPERIMENT:-${EXPERIMENT:-}}"
 : "${EXPERIMENT:?No EXPERIMENT set — add EXPERIMENT=\"<name>\" to env.site.sh, matching a folder experiments/<name>/}"
 
+#--- Experiment folder and file ---------------------------------
 EXPERIMENT_DIR="${ROOT_DIR}/experiments/${EXPERIMENT}"
 EXPERIMENT_FILE="${EXPERIMENT_DIR}/${EXPERIMENT}.sh"
 if [ ! -f "${EXPERIMENT_FILE}" ]; then
@@ -29,14 +20,11 @@ if [ ! -f "${EXPERIMENT_FILE}" ]; then
   exit 1
 fi
 
-# Drop any per-experiment settings an older env.site.sh may still define,
-# so only the experiment file's values are used.
+#--- Load it (dropping old env.site.sh values first) ------------
 unset run DOMAIN_ID OUTPUT_WRF OUTPUT_DIR ECFS_BASE REMOTE_BASE CP_RUN_DIR
 
 # shellcheck source=/dev/null
 source "${EXPERIMENT_FILE}"
-# (run, DOMAIN_ID, OUTPUT_WRF, OUTPUT_DIR, ECFS_BASE, REMOTE_BASE and
-# ROOT_RUN_DIR are all defined by the experiment file.)
 
 : "${ROOT_RUN_DIR:?No ROOT_RUN_DIR set in ${EXPERIMENT_FILE}}"
 
@@ -45,10 +33,10 @@ if [ "$(declare -p run 2>/dev/null | cut -c1-10)" != "declare -A" ] || [ "${#run
   exit 1
 fi
 
-# Grids in a fixed order (d01, d02, ...) — bash doesn't keep the order of
-# an associative array's keys. Loop over GRIDS, not "${!run[@]}".
+#--- Grids in sorted order (d01, d02, ...) ----------------------
 mapfile -t GRIDS < <(printf '%s\n' "${!run[@]}" | sort)
 
+#--- Check every grid has all its entries and ini files ---------
 for _grid in "${GRIDS[@]}"; do
   for _arr in DOMAIN_ID OUTPUT_WRF OUTPUT_DIR ECFS_BASE REMOTE_BASE; do
     _ref="${_arr}[${_grid}]"
@@ -65,8 +53,7 @@ for _grid in "${GRIDS[@]}"; do
   done
 done
 
-# Two grids writing to the same OUTPUT_DIR would be archived together to
-# one grid's ECFS/remote paths.
+#--- Check no two grids share an OUTPUT_DIR ---------------------
 declare -A _seen=()
 for _grid in "${GRIDS[@]}"; do
   _d="${OUTPUT_DIR[$_grid]%/}"
