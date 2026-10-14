@@ -1,13 +1,10 @@
 #!/bin/bash
-#SBATCH --qos=nf
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --hint=nomultithread
 
 # ------------------------------------------------------------------
-#  Nothing site-specific lives in this file: --account / --mail-type /
-#  --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
-#  by submit.sh.
+#  No #SBATCH lines and nothing site-specific in this file: --qos /
+#  --nodes / --ntasks / --hint / --account / --mail-type / --mail-user /
+#  --chdir all come from env.site.sh (JOB_* settings), passed in by
+#  submit.sh.
 #
 #  Run using:
 #

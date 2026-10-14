@@ -7,9 +7,10 @@
 # It:
 #   - auto-detects ROOT_DIR from where THIS file lives and passes it into
 #     the job's environment via `sbatch --export`, and
-#   - reads the site's Slurm settings from env.site.sh (JOB_ACCOUNT,
-#     JOB_MAIL_TYPE, JOB_MAIL_USER, JOB_CHDIR) and passes them as
-#     --account / --mail-type / --mail-user / --chdir.
+#   - reads the site's Slurm settings from env.site.sh (JOB_QOS,
+#     JOB_NODES, JOB_NTASKS, JOB_HINT, JOB_ACCOUNT, JOB_MAIL_TYPE,
+#     JOB_MAIL_USER, JOB_CHDIR) and passes them as --qos / --nodes /
+#     --ntasks / --hint / --account / --mail-type / --mail-user / --chdir.
 #
 # #SBATCH lines are read by sbatch before a script runs, so a script can't
 # load these values itself — passing them here is what lets them live in
@@ -69,23 +70,34 @@ if [ ! -f "${env_file}" ]; then
   exit 1
 fi
 
-# Read only the four JOB_* values, in a subshell, so nothing else that
+# env.site.sh setting -> sbatch flag, and the value used when the setting
+# is missing from env.site.sh altogether (so an older env.site.sh keeps the
+# previous behaviour). A setting that is present but empty ("") passes no
+# flag at all.
+job_vars=(  JOB_QOS JOB_NODES JOB_NTASKS JOB_HINT        JOB_ACCOUNT JOB_MAIL_TYPE JOB_MAIL_USER JOB_CHDIR )
+job_flags=( --qos   --nodes   --ntasks   --hint          --account   --mail-type   --mail-user   --chdir   )
+job_defs=(  nf      1         1          nomultithread   ""          ALL           ""            ""        )
+
+# Read only these JOB_* values, in a subshell, so nothing else that
 # env.site.sh sets or loads (modules, compiler settings, ...) leaks into
 # the job's environment through --export=ALL. set -u is relaxed there
-# because env.site.sh is plain user config.
-# Each value is printed with a trailing "|" so empty values still produce
-# a line (command substitution would otherwise drop trailing empty lines).
+# because env.site.sh is plain user config. Each value is printed with a
+# trailing "|" so empty values still produce a line (command substitution
+# would otherwise drop trailing empty lines).
 job_settings="$(
   set +eu
   # shellcheck source=/dev/null
   source "${env_file}" >/dev/null 2>&1
-  printf '%s|\n' "${JOB_ACCOUNT:-}" "${JOB_MAIL_TYPE:-}" "${JOB_MAIL_USER:-}" "${JOB_CHDIR:-}"
+  for i in "${!job_vars[@]}"; do
+    name="${job_vars[$i]}"
+    if [ -n "${!name+x}" ]; then
+      printf '%s|\n' "${!name}"
+    else
+      printf '%s|\n' "${job_defs[$i]}"
+    fi
+  done
 )"
 mapfile -t job_values <<< "${job_settings}"
-JOB_ACCOUNT="${job_values[0]%|}"
-JOB_MAIL_TYPE="${job_values[1]%|}"
-JOB_MAIL_USER="${job_values[2]%|}"
-JOB_CHDIR="${job_values[3]%|}"
 
 # True if the caller already passed this sbatch flag (e.g. --account=...).
 caller_has() {
@@ -98,15 +110,13 @@ caller_has() {
 
 # Add "--flag=value" unless the value is empty or the caller set it.
 site_args=()
-add_site_arg() {
-  if [ -n "$2" ] && ! caller_has "$1"; then
-    site_args+=("$1=$2")
+for i in "${!job_vars[@]}"; do
+  value="${job_values[$i]%|}"
+  printf -v "${job_vars[$i]}" '%s' "${value}"
+  if [ -n "${value}" ] && ! caller_has "${job_flags[$i]}"; then
+    site_args+=("${job_flags[$i]}=${value}")
   fi
-}
-add_site_arg --account   "${JOB_ACCOUNT}"
-add_site_arg --mail-type "${JOB_MAIL_TYPE}"
-add_site_arg --mail-user "${JOB_MAIL_USER}"
-add_site_arg --chdir     "${JOB_CHDIR}"
+done
 
 if [ -z "${JOB_ACCOUNT}" ] && ! caller_has --account; then
   echo "WARNING: JOB_ACCOUNT is empty in ${env_file} — the job will use your default Slurm account." >&2

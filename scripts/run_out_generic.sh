@@ -1,8 +1,4 @@
 #!/bin/bash
-#SBATCH --qos=nf
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --hint=nomultithread
 #
 # scripts/run_out_generic.sh
 #
@@ -10,9 +6,10 @@
 # (all run_out_* variants in this repo). Which variables/programs it runs is
 # looked up from config/varsets.sh using the 4th argument.
 #
-# Nothing site-specific lives in this file: --account / --mail-type /
-# --mail-user / --chdir come from env.site.sh (JOB_* settings), passed in
-# by submit.sh — which is also how this script submits its own follow-up
+# No #SBATCH lines and nothing site-specific in this file: --qos /
+# --nodes / --ntasks / --hint / --account / --mail-type / --mail-user /
+# --chdir all come from env.site.sh (JOB_* settings), passed in by
+# submit.sh — which is also how this script submits its own follow-up
 # jobs.
 #
 # Usage:
@@ -23,9 +20,8 @@
 # You can submit from anywhere (e.g. $SCRATCH/Analysis): call submit.sh by
 # its path or through a symlink — it finds the repo itself.
 #
-# (--job-name / --time / --mem / --output / --error on the command line override
-#  the #SBATCH defaults above, so you don't need a separate file per
-#  varset just to change those.)
+# (--job-name / --time / --mem / --output / --error are set per varset on
+#  the submit.sh command line, so there's no separate file per varset.)
 #
 # At the end of its year loop this script also submits
 # scripts/run_cp_generic.sh for the same varset (archiving to ECFS/remote),
