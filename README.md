@@ -153,8 +153,8 @@ Each varset maps to one or more variable "groups", each with its own
 program pattern:
 
 ```
-[out]="RCM_sfc_VAR:tas,ts,th,..."                 # RCM_sfc_tas.f90, RCM_sfc_ts.f90, ...
-[cloud]="RCM_sfc_cloud:clh,clm,cll,clt"            # always RCM_sfc_cloud.f90
+[out1]="RCM_sfc_VAR:tas,ts,th,..."                # RCM_sfc_tas.f90, RCM_sfc_ts.f90, ...
+[cloud1]="RCM_sfc_cloud:clh,clm"                  # always RCM_sfc_cloud.f90
 [plev_ta]="RCM_plev_ta:ta1000,ta925,...,ta30"      # always RCM_plev_ta.f90, all 16 levels
 [zlev_uava0]="RCM_zlev_uava:va50m,va150m,va100m"   # always RCM_zlev_uava.f90
 ```
@@ -246,20 +246,24 @@ compile/run environment) live in `env.site.sh`: `CP_MODULES`, `CP_RUN_DIR`,
 ## 8. Chaining behaviour
 
 Each varset's year loop resubmits another varset when it finishes (`NEXT[]`
-in `config/varsets.sh`), verified against each live script's *uncommented*
-`sbatch` call:
+in `config/varsets.sh`). The varsets are arranged in 10 parallel
+"streams", balanced on measured run times so each takes about the same
+time per model year (~21h) — the table at the top of `config/varsets.sh`
+lists them:
 
-- **2-cycles**: `out↔soil`, `rad↔snw`, `cloud↔wxtrm`, `tau↔wpth`,
-  `plev_wa↔plev_zg`, `plev_hus↔zlev_hus`, `plev_ta↔zlev_ta`
-- **Self-loops** (resubmits itself each year): `plev_uava`, `zlev_uava0`,
-  `zlev_uava1`
+- **2-hop chains**: `plev_uava→wxtrm`, `cloud1→wpth1`, `cloud2→wpth3`,
+  `plev_zg→snw`, `plev_ta→wpth2`, `rad→out1`
+- **3-hop chains**: `plev_wa→zlev_hus→zlev_ta`, `plev_hus→soil→out2`
+- **Self-loops** (resubmits itself each year): `zlev_uava0`, `zlev_uava1`
 
-Only about half the varsets actually advance `yeari`/`yearf` before
-resubmitting (`ADVANCE_YEAR[]`) — in each 2-cycle, one side advances the
-year and the other doesn't, so the pair advances one year per full
-round-trip rather than per hop. This is preserved as-is from the original
-scripts rather than "fixed", since changing it would double the effective
-year-advance rate.
+`ORDER` holds the first link of each stream. Exactly one link per stream
+advances `yeari`/`yearf` (`ADVANCE_YEAR[]`) — the last one before the
+chain returns to its first link — so each stream advances one year per
+full round-trip, not per hop.
+
+To rebalance (e.g. after run times change), run `report_walltimes.sh` and
+move variables between varsets: every program runs once per variable or
+level, so any varset can be split.
 
 ## 9. Where the code lives (`ROOT_DIR`)
 
