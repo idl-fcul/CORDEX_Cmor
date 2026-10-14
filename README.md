@@ -267,23 +267,25 @@ level, so any varset can be split.
 
 ## 9. Where the code lives (`ROOT_DIR`)
 
-This repo can live anywhere (e.g. `ROOT_DIR=$HPCPERM/CORDEX/scenarios/Analysis`)
+This repo can live anywhere (e.g. `$HPCPERM/CORDEX/scenarios/Analysis`)
 — it does **not** need to be checked out into your submission/scratch
-directory, and you don't need to `cd` into it before running `sbatch`.
+directory. There's nothing to export: `submit.sh` works out `ROOT_DIR`
+from its own location and passes it to every job it submits (and the
+scripts submit their follow-up jobs through it too).
 
-Every script requires `ROOT_DIR` to already be set in your environment,
-checked at startup with a clear error if it isn't. **Scripts do not try to
-auto-detect their own location from `$0`/`dirname`** — `sbatch` copies the
-submitted script into a spool directory before running it, so `$0` at
-runtime often doesn't point at this repo at all, especially once you submit
-from somewhere else (e.g. `$SCRATCH/Analysis`) than where the code lives.
-
-Export it once, e.g. in `~/.bashrc` so every future shell (and every batch
-job, since Slurm inherits your environment by default) has it:
+To submit from another directory (e.g. `$SCRATCH/Analysis`), call
+`submit.sh` by its path, or put a symlink to it there:
 
 ```bash
-export ROOT_DIR=$HPCPERM/CORDEX/scenarios/Analysis
+cd $SCRATCH/Analysis
+ln -s $HPCPERM/CORDEX/scenarios/Analysis/submit.sh .
+./submit.sh run_Analysis_v2.sh 20010101 20011231 2005
 ```
+
+The symlink is resolved, so `ROOT_DIR` still points at the repo. (The
+scripts themselves can't find the repo from `$0`, because Slurm runs a
+spooled copy of them — which is why they must be submitted through
+`submit.sh` rather than plain `sbatch`.)
 
 This is completely independent of:
 - **where you submit from** — anywhere, e.g. `$SCRATCH/Analysis` (set
@@ -297,14 +299,14 @@ This is completely independent of:
 
 ### First-time setup checklist
 
-1. Check out this repo somewhere permanent — that's `ROOT_DIR`.
-2. `export ROOT_DIR=/path/to/it` (add to `~/.bashrc`).
-3. Fill in `header_ini/` and confirm `header/` (§2, §3).
-4. `cp env.site.sh.example env.site.sh` and fill it in (§4).
-5. Check `config/varsets.sh` covers the variables you need (§5) —
+1. Check out this repo somewhere permanent — that's `ROOT_DIR` (found
+   automatically by `submit.sh`, nothing to export).
+2. Fill in `header_ini/` and confirm `header/` (§2, §3).
+3. `cp env.site.sh.example env.site.sh` and fill it in (§4).
+4. Check `config/varsets.sh` covers the variables you need (§5) —
    `MIGRATION.md` maps old script names to varsets if you're coming from
    the previous per-variable-script layout.
-6. In `env.site.sh`, fill in `JOB_ACCOUNT`, `JOB_MAIL_USER` and
+5. In `env.site.sh`, fill in `JOB_ACCOUNT`, `JOB_MAIL_USER` and
    `JOB_CHDIR` (§4, §6) — nothing to edit in `scripts/`.
 
 ### Standard submission
@@ -319,10 +321,10 @@ self-resubmission at a specific year so a stuck loop doesn't run forever.
 cd $SCRATCH/Analysis   # or wherever you want to submit from — doesn't have to be ROOT_DIR
 
 # Syntax
-$ROOT_DIR/submit.sh run_Analysis_v2.sh <datebeg> <dateend> <year_lim>
+./submit.sh run_Analysis_v2.sh <datebeg> <dateend> <year_lim>
 
 # Example: process 2001, then keep chaining year by year until 2005
-$ROOT_DIR/submit.sh run_Analysis_v2.sh 20010101 20011231 2005
+./submit.sh run_Analysis_v2.sh 20010101 20011231 2005
 ```
 
 Always submit through `submit.sh` (not plain `sbatch`): it's what applies
@@ -335,7 +337,7 @@ old `run_out_<x>.sh` script went) to find which varset covers your
 variable, then submit it directly — no file to modify:
 
 ```bash
-$ROOT_DIR/submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
+./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
        --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
        run_out_generic.sh 19900101 19901231 2000 soil
 ```
@@ -352,7 +354,7 @@ since that part is unconditional):
 
 ```bash
 # Process 2001-2005 in one job, no auto-chained follow-up job
-$ROOT_DIR/submit.sh --job-name=wrf-out --time=18:00:00 --mem=8G \
+./submit.sh --job-name=wrf-out --time=18:00:00 --mem=8G \
        --output=wrf-out.%j.out --error=wrf-out.%j.out \
        run_out_generic.sh 20010101 20051231 2000 out
 ```

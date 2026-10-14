@@ -92,7 +92,7 @@ scheduling/chaining or not:
   to submit it manually:
 
   ```bash
-  $ROOT_DIR/submit.sh --job-name=wrf-my_few --time=04:00:00 --mem=8G \
+  ./submit.sh --job-name=wrf-my_few --time=04:00:00 --mem=8G \
          --output=wrf-my_few.%j.out --error=wrf-my_few.%j.out \
          run_out_generic.sh 19900101 19901231 2000 my_few
   ```
