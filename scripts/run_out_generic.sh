@@ -62,6 +62,10 @@ fi
 # site/user-specific paths, modules, compiler flags -> env.site.sh
 source "${REPO_DIR}/env.site.sh"
 
+# experiment: grids, and per grid the WRF input / output / archive paths
+# -> experiments/${EXPERIMENT}.sh
+source "${REPO_DIR}/scripts/load_experiment.sh"
+
 # variable-set definitions, walltimes, chaining -> config/varsets.sh
 source "${REPO_DIR}/config/varsets.sh"
 
@@ -80,10 +84,8 @@ if [ "${VARSET}" = "wxtrm" ] || [ "${VARSET}" = "testex" ]; then
   wrffile="wrfxtrm"
 fi
 
-# EXPERIMENT is a single site-wide value, not per-grid — an experiment can
-# span multiple domains (e.g. fpsurb runs both d01 and d02), unlike
-# DOMAIN_ID which does vary per grid within an experiment.
-exp="${EXPERIMENT:?No EXPERIMENT set in env.site.sh — add EXPERIMENT=\"cordex\" (or \"fpsurb\") near OUTPUT_WRF/OUTPUT_DIR}"
+# EXPERIMENT also picks the header_ini files (<exp>_<DOMAIN_ID>_<grid>.ini).
+exp="${EXPERIMENT}"
 
 # VARSETS[$VARSET] looks like "PROGRAM_A:var1,var2;PROGRAM_B:var3,var4"
 # (one or more ';'-separated groups; each a program pattern + its variables)
@@ -116,9 +118,10 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
 #
 # Domain
 #
- for grid in "${!run[@]}"; do
+ for grid in "${GRIDS[@]}"; do
 
-  dom_id="${DOMAIN_ID[${grid}]:?No DOMAIN_ID set for '${grid}' in env.site.sh — add [${grid}]=\"<CORDEX-domain-id>\" to the DOMAIN_ID array}"
+  dom_id="${DOMAIN_ID[${grid}]}"
+  mkdir -p "${OUTPUT_DIR[${grid}]}"
 
   cp ${HEADER_INI_DIR}/${exp}_global_${dom_id}_${grid}.ini  global_data.inp
 
@@ -137,8 +140,8 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
      -e "s|_START_YY_|$START_YY|g" \
      -e "s|_END_YY_|$END_YY|g" \
      -e "s|_WRFFILE_|${wrffile}|g" \
-     -e "s|_OUTPUT_WRF_|${OUTPUT_WRF}/|g" \
-     -e "s|_OUTPUT_DIR_|${OUTPUT_DIR}/|g" \
+     -e "s|_OUTPUT_WRF_|${OUTPUT_WRF[${grid}]}/|g" \
+     -e "s|_OUTPUT_DIR_|${OUTPUT_DIR[${grid}]}/|g" \
      "${HEADER_INI_DIR}/${exp}_${dom_id}_${grid}.ini" \
      > "${RUN_DIR}/header_${grid}"
     

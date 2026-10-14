@@ -23,6 +23,8 @@ jobs:
             scripts/run_out_generic.sh \
             scripts/run_cp_generic.sh \
             scripts/run_analysis.sh \
+            scripts/load_experiment.sh \
+            experiments/*.sh \
             config/varsets.sh \
             config/varsets_single.sh \
             env.site.sh.example

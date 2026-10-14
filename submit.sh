@@ -6,7 +6,10 @@
 # first run_analysis.sh submission and every job the scripts chain to).
 # It:
 #   - auto-detects ROOT_DIR from where THIS file lives and passes it into
-#     the job's environment via `sbatch --export`, and
+#     the job's environment via `sbatch --export`,
+#   - passes the experiment (EXPERIMENT in env.site.sh, or
+#     EXPERIMENT=<name> ./submit.sh ...) to the job as CMOR_EXPERIMENT, so
+#     every job of a chain uses the experiment it was started with, and
 #   - reads the site's Slurm settings from env.site.sh (JOB_QOS,
 #     JOB_NODES, JOB_NTASKS, JOB_HINT, JOB_ACCOUNT, JOB_MAIL_TYPE,
 #     JOB_MAIL_USER, JOB_CHDIR) and passes them as --qos / --nodes /
@@ -96,8 +99,21 @@ job_settings="$(
       printf '%s|\n' "${job_defs[$i]}"
     fi
   done
+  # Experiment: the one this chain was started with (CMOR_EXPERIMENT, set
+  # by an earlier submit.sh) wins over env.site.sh.
+  printf '%s|\n' "${CMOR_EXPERIMENT:-${EXPERIMENT:-}}"
 )"
 mapfile -t job_values <<< "${job_settings}"
+
+CMOR_EXPERIMENT="${job_values[${#job_vars[@]}]%|}"
+if [ -z "${CMOR_EXPERIMENT}" ]; then
+  echo "No EXPERIMENT set in ${env_file} — add EXPERIMENT=\"<name>\" matching a file experiments/<name>.sh." >&2
+  exit 1
+fi
+if [ ! -f "${ROOT_DIR}/experiments/${CMOR_EXPERIMENT}.sh" ]; then
+  echo "No experiment file ${ROOT_DIR}/experiments/${CMOR_EXPERIMENT}.sh (EXPERIMENT=\"${CMOR_EXPERIMENT}\")." >&2
+  exit 1
+fi
 
 # True if the caller already passed this sbatch flag (e.g. --account=...).
 caller_has() {
@@ -122,10 +138,10 @@ if [ -z "${JOB_ACCOUNT}" ] && ! caller_has --account; then
   echo "WARNING: JOB_ACCOUNT is empty in ${env_file} — the job will use your default Slurm account." >&2
 fi
 
-echo "ROOT_DIR=${ROOT_DIR} (auto-detected from submit.sh's location)"
+echo "ROOT_DIR=${ROOT_DIR} (auto-detected from submit.sh's location), EXPERIMENT=${CMOR_EXPERIMENT}"
 
 # Site settings first, then the caller's own flags, so the caller's win.
-exec sbatch --export=ALL,ROOT_DIR="${ROOT_DIR}" \
+exec sbatch --export=ALL,ROOT_DIR="${ROOT_DIR}",CMOR_EXPERIMENT="${CMOR_EXPERIMENT}" \
      ${site_args[@]+"${site_args[@]}"} \
      ${sbatch_args[@]+"${sbatch_args[@]}"} \
      "${target_path}" "$@"

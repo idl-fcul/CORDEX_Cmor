@@ -25,7 +25,8 @@ header/        <- per-variable namelist headers
 header_ini/    <- per-domain grid/global config (see header_ini/README.md)
 config/        <- varsets.sh: the single source of truth for variables/programs/scheduling (see config/README.md);
                   varsets_single.sh: every varset loops on itself (§10)
-scripts/       <- the 3 generic job scripts
+experiments/   <- one file per experiment: grids, and per grid the WRF input, output and archive paths (§4)
+scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they source)
 env.site.sh.example, LICENSE, README.md, MIGRATION.md
 ```
 
@@ -44,20 +45,19 @@ for the full filename pattern):
   `cordex_EUR-12_d01.ini`), update the domain of the output file (and
   the matching `geog` name).
 
-  * **Directories:** now set in `env.site.sh` (§4) as `OUTPUT_WRF` (raw
-    `wrfout` location) and `OUTPUT_DIR` (CMORised-output destination), not
-    in the `.ini` files — the `.ini` files just hold the
-    `_OUTPUT_WRF_`/`_OUTPUT_DIR_` placeholders `run_out_generic.sh`
-    substitutes at run time. `cordex_EUR-12_d01.ini`), update the domain of the output file (and
-    the matching `geog` name).
+  * **Directories:** set per grid in the experiment file (§4,
+    `experiments/<name>.sh`) as `OUTPUT_WRF[]` (raw `wrfout` location) and
+    `OUTPUT_DIR[]` (CMORised-output destination), not in the `.ini` files —
+    the `.ini` files just hold the `_OUTPUT_WRF_`/`_OUTPUT_DIR_`
+    placeholders `run_out_generic.sh` substitutes at run time.
   * **Naming Conventions:** change the general domain and model names used
   for the CMORised variables (`dom`/`outdom`, same file).
 
 * **Global Properties:** edit `<EXPERIMENT>_global_<DOMAIN_ID>_<grid>.ini`
   (e.g. `cordex_global_EUR-12_d01.ini`) — the global characteristics of
   the variables, tailored to your experiment. `<EXPERIMENT>` and
-  `<DOMAIN_ID>` must match what you set in `env.site.sh`'s
-  `EXPERIMENT[]`/`DOMAIN_ID[]` maps for that grid (§4) — every
+  `<DOMAIN_ID>` must match the experiment's name and its `DOMAIN_ID[]`
+  entry for that grid (§4, `experiments/<name>.sh`) — every
   `<EXPERIMENT>`/`<DOMAIN_ID>` pair needs **both** an
   `<EXPERIMENT>_<DOMAIN_ID>_<grid>.ini` and a matching
   `<EXPERIMENT>_global_<DOMAIN_ID>_<grid>.ini`; a domain-ID mismatch
@@ -87,42 +87,15 @@ cp env.site.sh.example env.site.sh
 ```
 
 * **Paths** — `PROG_DIR`, `HEADER_DIR`, `HEADER_INI_DIR` (all derived from
-  `ROOT_DIR`, so you don't repeat yourself), and `RUN_DIR` — the scratch
-  working directory each run processes in. Each run generates its own
-  namelist and works in this folder; don't change that behaviour, just
-  point it wherever you want the scratch data to live.
+  `ROOT_DIR`, so you don't repeat yourself).
 * **Compiler/library versions** — `intel_v`, `hdf5_v`, `netcdf_v`, `FC`,
   `FFLAGS`, and the NetCDF/HDF5 include/lib paths.
-* **Domains** — `run` is the set of grids to process, keyed the same way
-  as `DOMAIN_ID[]` below it (only the keys matter; the value is unused,
-  `1` by convention) — e.g. `run=([d01]=1)`, plus a matching entry in
-  `DOMAIN_ID[]` (e.g. `[d01]="EUR-12"`) for each. Together with
-  `EXPERIMENT` (below) these select `<EXPERIMENT>_<DOMAIN_ID>_<grid>.ini` /
-  `<EXPERIMENT>_global_<DOMAIN_ID>_<grid>.ini` out of `header_ini/` — see
-  [`header_ini/README.md`](header_ini/README.md). Add as many
-  `run`/`DOMAIN_ID` entries as you need, provided you have a matching
-  `header_ini` file for each. Comment a grid's line out in `run` to
-  disable it without deleting its `DOMAIN_ID` entry.
-* **Experiment + raw/output directories** — `EXPERIMENT` (the campaign
-  prefix, `cordex` for standard CORDEX-CMIP6 runs or `fpsurb` for
-  FPS-URB-RCC runs), `OUTPUT_WRF` (raw `wrfout` location) and `OUTPUT_DIR`
-  (CMORised-output destination, sed'd into each `.ini` file's
-  `_OUTPUT_WRF_`/`_OUTPUT_DIR_` placeholders at run time). **Unlike
-  `DOMAIN_ID`, these three are single site-wide values, not per-grid** —
-  an experiment always spans every grid in `run` together (`cordex` only
-  ever runs `d01`; `fpsurb` runs `d01` *and* `d02` at once, just on
-  different domain IDs — `EUR-12` and `PARIS-3` respectively).
-  `env.site.sh.example` ships two ready-made blocks (CORDEX vs.
-  urban-downscaling); uncomment whichever matches what you're currently
-  running, together with the matching `run`/`DOMAIN_ID` entries above.
-  **Uncomment the whole block, not just some lines** — the two blocks
-  work by plain sequential reassignment (the urban block, being lower in
-  the file, simply overwrites `EXPERIMENT`/`ROOT_RUN_DIR`/`OUTPUT_DIR`/
-  `OUTPUT_WRF` if you leave the CORDEX block active above it), so leaving
-  any one of those four commented out in the block you actually want
-  silently keeps that variable's CORDEX-block value instead.
-* **Archive step settings** — `CP_MODULES`, `CP_RUN_DIR`, `ECFS_BASE`,
-  `REMOTE_HOST`, `REMOTE_BASE` (see [§7, Archiving](#7-archiving)).
+* **Experiment** — `EXPERIMENT`, the name of the experiment file to use
+  (`experiments/<name>.sh`, see below). Everything that differs per
+  experiment or per domain lives in that file, not here.
+* **Archive step settings** — `CP_MODULES`, `REMOTE_HOST` (see
+  [§7, Archiving](#7-archiving)). The archive *paths* are per grid, in the
+  experiment file.
 
 `env.site.sh` is gitignored — it never gets committed.
 
@@ -133,6 +106,51 @@ cp env.site.sh.example env.site.sh
   `--mail-user` / `--chdir` (see
   [§6](#6-submission-scripts-scripts-folder)). Leave one empty to not pass
   that flag.
+
+### Experiments (`experiments/<name>.sh`)
+
+One file per experiment (`cordex.sh`, `fpsurb.sh`, ...). The file name is
+the experiment name: it's what `EXPERIMENT` in `env.site.sh` selects, and
+the prefix of that experiment's `header_ini/` files. Each file sets:
+
+* **`ROOT_RUN_DIR`** — scratch working directory; each varset works in
+  `${ROOT_RUN_DIR}/<varset>`.
+* **`run[]`** — the grids to process (`[d01]=1`, `[d02]=1`, ...; only the
+  keys matter). Comment a line out to skip that grid.
+* Per grid, keyed the same way as `run[]`:
+  * **`DOMAIN_ID[]`** — CORDEX domain ID (`EUR-12`, `PARIS-3`), which picks
+    `<EXPERIMENT>_<DOMAIN_ID>_<grid>.ini` / `<EXPERIMENT>_global_<DOMAIN_ID>_<grid>.ini`
+    out of `header_ini/` (see [`header_ini/README.md`](header_ini/README.md)).
+  * **`OUTPUT_WRF[]`** — raw WRF output location.
+  * **`OUTPUT_DIR[]`** — where that grid's CMORised output is written.
+    **Each grid needs its own directory**: the archive step sends
+    everything in it to that grid's archive paths.
+  * **`ECFS_BASE[]`**, **`REMOTE_BASE[]`** — that grid's ECFS and remote
+    archive paths.
+
+Every processing job loops over the grids in `run[]` in order (`d01`,
+then `d02`, ...), and every archive job archives each grid's output to its
+own paths. A grid in `run[]` that's missing any of these entries, or two
+grids sharing an `OUTPUT_DIR`, stops the job at the start with a message
+saying what's wrong.
+
+Enabling a second grid makes **every** job do both, so raise `TIME[]` in
+`config/varsets.sh` accordingly, and remember both grids' output sits on
+disk until its archive job has run.
+
+To run a different experiment, change `EXPERIMENT` in `env.site.sh`, or
+override it for one run:
+
+```bash
+EXPERIMENT=cordex ./submit.sh run_analysis.sh 20010101 20011231 2005
+```
+
+`submit.sh` passes the experiment on to every job of that run, so a chain
+keeps the experiment it was started with even if you change
+`env.site.sh` while it's running.
+
+To add an experiment, copy one of the files in `experiments/`, rename it,
+fill it in, and add matching `header_ini/` files for each grid.
 
 ## 5. Variable Sets (`config/varsets.sh`)
 
@@ -244,9 +262,12 @@ used for processing and aren't in `ORDER`/`NEXT`/`TIME`). When
 `CP_EXTRA[$VARSET]` is set, `run_out_generic.sh` submits a second
 `run_cp_generic.sh` job for that companion.
 
-The archive step's modules and remote paths (which differ from the
-compile/run environment) live in `env.site.sh`: `CP_MODULES`, `CP_RUN_DIR`,
-`ECFS_BASE`, `REMOTE_HOST`, `REMOTE_BASE`.
+The archive step's modules and remote host (which differ from the
+compile/run environment) live in `env.site.sh`: `CP_MODULES`,
+`REMOTE_HOST`. The output directory and the ECFS/remote archive paths are
+per grid, in the experiment file (`OUTPUT_DIR[]`, `ECFS_BASE[]`,
+`REMOTE_BASE[]` — §4): each grid is archived from its own output directory
+to its own paths.
 
 ## 8. Chaining behaviour
 
@@ -295,10 +316,10 @@ spooled copy of them — which is why they must be submitted through
 This is completely independent of:
 - **where you submit from** — anywhere, e.g. `$SCRATCH/Analysis` (set
   `JOB_CHDIR` in `env.site.sh` if you want job logs to land there)
-- **`RUN_DIR`** (`env.site.sh`) — per-run scratch working directory used
-  while processing (e.g. `$SCRATCH/ssp370/out`)
-- **`CP_RUN_DIR`** (`env.site.sh`) — where finished output files land
-  before archiving (e.g. `$SCRATCH/ssp370/output`)
+- **`ROOT_RUN_DIR`** (experiment file) — scratch working directory used
+  while processing (e.g. `$SCRATCH/ssp370`)
+- **`OUTPUT_DIR[]`** (experiment file) — where each grid's finished output
+  files land before archiving (e.g. `$SCRATCH/ssp370/output`)
 
 ## 10. Job Submission Instructions
 
@@ -307,7 +328,8 @@ This is completely independent of:
 1. Check out this repo somewhere permanent — that's `ROOT_DIR` (found
    automatically by `submit.sh`, nothing to export).
 2. Fill in `header_ini/` and confirm `header/` (§2, §3).
-3. `cp env.site.sh.example env.site.sh` and fill it in (§4).
+3. `cp env.site.sh.example env.site.sh` and fill it in, and check the
+   experiment file you'll use in `experiments/` (§4).
 4. Check `config/varsets.sh` covers the variables you need (§5) —
    `MIGRATION.md` maps old script names to varsets if you're coming from
    the previous per-variable-script layout.
