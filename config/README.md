@@ -6,6 +6,16 @@ schedule each job for, and how (or whether) jobs chain into one another.
 `scripts/run_out_generic.sh` and `scripts/run_cp_generic.sh` are generic —
 everything specific to a given "varset" lives here, not in the scripts.
 
+The scripts only ever read `config/varsets.sh`. Two saved layouts sit
+next to it, to copy over it when needed (main README §10):
+
+| File | Layout |
+|---|---|
+| `varsets_chain.sh` | the chained streams (§8) — a saved copy of the default `varsets.sh` |
+| `varsets_single.sh` | every varset loops on itself, year by year |
+
+When you change a varset, make the same change in all three files.
+
 See the main [README.md](../README.md) (§5) for the full onboarding walkthrough.
 This file goes one level deeper into the mechanics.
 
