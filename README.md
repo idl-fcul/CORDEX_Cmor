@@ -208,8 +208,8 @@ its two ini files, or two grids sharing an `OUTPUT_DIR`, stops the job at
 the start with a message saying what's wrong.
 
 Enabling a second grid makes **every** job do both, so raise `TIME[]` in
-`config/varsets.sh` accordingly, and remember both grids' output sits on
-disk until its archive job has run.
+`config/varsets.sh` accordingly, and remember both grids' output stays on
+disk — the archive step (§7) copies it but doesn't delete it.
 
 ### The ini files (one pair per grid)
 
