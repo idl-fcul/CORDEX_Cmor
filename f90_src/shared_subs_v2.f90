@@ -30,6 +30,11 @@ subroutine read_cordex_config(cfg_filename)
     ! Initialize both to the target missing_value flag before testing namelist file content
     height(1) = missing_value
     pres      = missing_value
+    projection = ''
+    pole_lat = missing_value;  pole_lon = missing_value
+    truelat1 = missing_value;  truelat2 = missing_value
+    stand_lon = missing_value; cen_lat = missing_value
+    false_easting = 0.;        false_northing = 0.
 
     read(unit_id, nml=cordex_config, iostat=status_id)
     if (status_id /= 0) then
@@ -37,6 +42,21 @@ subroutine read_cordex_config(cfg_filename)
         close(unit_id)
         stop 92
     end if
+
+    ! The projection must be set in the grid's ini (see experiments/README.md)
+    projection = trim(adjustl(projection))
+    select case (trim(projection))
+    case ('rotated_latitude_longitude')
+        if (pole_lat == missing_value .or. pole_lon == missing_value) then
+            print *, "ERROR: projection = 'rotated_latitude_longitude' needs pole_lat and pole_lon in ", trim(cfg_filename)
+            stop 95
+        end if
+    case ('lambert_conformal_conic')
+        continue   ! missing parameters are read from the geo_em file (read_geog)
+    case default
+        print *, "ERROR: set projection = 'rotated_latitude_longitude' or 'lambert_conformal_conic' in ", trim(cfg_filename)
+        stop 95
+    end select
 
     close(unit_id)
     print *, "Successfully loaded run configurations from: ", trim(cfg_filename)
@@ -104,6 +124,27 @@ geofile = gfile(1:len_trim(gfile))
 status = nf90_open(geofile, nf90_nowrite, ncid)
 call ncerror(status, 'opening ' // trim(geofile))
 !
+! Lambert projection parameters not set in the ini: take them from the
+! geo_em file (WRF's TRUELAT1, TRUELAT2, STAND_LON, MOAD_CEN_LAT)
+if (trim(projection) == 'lambert_conformal_conic') then
+  if (truelat1 == missing_value) then
+    status = nf90_get_att(ncid, nf90_global, 'TRUELAT1', truelat1)
+    call ncerror(status, 'reading TRUELAT1 from '//trim(geofile))
+  end if
+  if (truelat2 == missing_value) then
+    status = nf90_get_att(ncid, nf90_global, 'TRUELAT2', truelat2)
+    call ncerror(status, 'reading TRUELAT2 from '//trim(geofile))
+  end if
+  if (stand_lon == missing_value) then
+    status = nf90_get_att(ncid, nf90_global, 'STAND_LON', stand_lon)
+    call ncerror(status, 'reading STAND_LON from '//trim(geofile))
+  end if
+  if (cen_lat == missing_value) then
+    status = nf90_get_att(ncid, nf90_global, 'MOAD_CEN_LAT', cen_lat)
+    call ncerror(status, 'reading MOAD_CEN_LAT from '//trim(geofile))
+  end if
+end if
+!
 ! Get rotated coordinates
 allocate(tlon(nlon, nlat), tlat(nlon, nlat))
 allocate(rlon(nlon), rlat(nlat))
@@ -163,6 +204,138 @@ end subroutine ncerror
 !
 !-----------------------------------------------------------------------
 !
+! Horizontal grid, shared by all write routines. The projection comes from
+! the grid's ini (&cordex_config: projection and its parameters):
+!   rotated_latitude_longitude: 1-D rlon/rlat (degrees) + pole_lat/pole_lon
+!   lambert_conformal_conic:    1-D x/y (m)         + truelat1/2, stand_lon, cen_lat
+! Both write 2-D lon/lat and a grid-mapping variable named after the projection.
+!
+subroutine def_horizontal_dims(ncid, XDimID, YDimID)
+use netcdf
+integer, intent(in)  :: ncid
+integer, intent(out) :: XDimID, YDimID
+if (trim(projection) == 'lambert_conformal_conic') then
+    status = nf90_def_dim(ncid, "x", nlon, XDimID)
+    status = nf90_def_dim(ncid, "y", nlat, YDimID)
+else
+    status = nf90_def_dim(ncid, "rlon", nlon, XDimID)
+    status = nf90_def_dim(ncid, "rlat", nlat, YDimID)
+end if
+call handle_err(status)
+end subroutine def_horizontal_dims
+
+subroutine def_horizontal_vars(ncid, XDimID, YDimID, LonVarID, LatVarID, XVarID, YVarID, gmVarID)
+use netcdf
+integer, intent(in)  :: ncid, XDimID, YDimID
+integer, intent(out) :: LonVarID, LatVarID, XVarID, YVarID, gmVarID
+
+status = nf90_def_var(ncid, "lon", nf90_double, (/ XDimID, YDimID /), LonVarID)
+status = nf90_def_var(ncid, "lat", nf90_double, (/ XDimID, YDimID /), LatVarID)
+status = nf90_put_att(ncid, LonVarID, "long_name","longitude")
+status = nf90_put_att(ncid, LonVarID, "standard_name","longitude")
+status = nf90_put_att(ncid, LonVarID, "units","degrees_east")
+status = nf90_put_att(ncid, LonVarID, "_CoordinateAxisType","Lon")
+status = nf90_put_att(ncid, LatVarID, "long_name","latitude")
+status = nf90_put_att(ncid, LatVarID, "standard_name","latitude")
+status = nf90_put_att(ncid, LatVarID, "units","degrees_north")
+status = nf90_put_att(ncid, LatVarID, "_CoordinateAxisType","Lat")
+call handle_err(status)
+
+status = nf90_def_var(ncid, trim(projection), nf90_char, gmVarID)
+status = nf90_put_att(ncid, gmVarID, "grid_mapping_name", trim(projection))
+
+if (trim(projection) == 'lambert_conformal_conic') then
+    status = nf90_def_var(ncid, "x", nf90_double, (/ XDimID /), XVarID)
+    status = nf90_def_var(ncid, "y", nf90_double, (/ YDimID /), YVarID)
+    status = nf90_put_att(ncid, XVarID, "long_name","x coordinate of projection")
+    status = nf90_put_att(ncid, XVarID, "standard_name","projection_x_coordinate")
+    status = nf90_put_att(ncid, XVarID, "units","m")
+    status = nf90_put_att(ncid, XVarID, "axis","X")
+    status = nf90_put_att(ncid, YVarID, "long_name","y coordinate of projection")
+    status = nf90_put_att(ncid, YVarID, "standard_name","projection_y_coordinate")
+    status = nf90_put_att(ncid, YVarID, "units","m")
+    status = nf90_put_att(ncid, YVarID, "axis","Y")
+    if (truelat1 == truelat2) then
+        status = nf90_put_att(ncid, gmVarID, "standard_parallel", truelat1)
+    else
+        status = nf90_put_att(ncid, gmVarID, "standard_parallel", (/ truelat1, truelat2 /))
+    end if
+    status = nf90_put_att(ncid, gmVarID, "longitude_of_central_meridian", stand_lon)
+    status = nf90_put_att(ncid, gmVarID, "latitude_of_projection_origin", cen_lat)
+    status = nf90_put_att(ncid, gmVarID, "false_easting", false_easting)
+    status = nf90_put_att(ncid, gmVarID, "false_northing", false_northing)
+else
+    status = nf90_def_var(ncid, "rlon", nf90_double, (/ XDimID /), XVarID)
+    status = nf90_def_var(ncid, "rlat", nf90_double, (/ YDimID /), YVarID)
+    status = nf90_put_att(ncid, XVarID, "long_name","longitude in rotated pole grid")
+    status = nf90_put_att(ncid, XVarID, "standard_name","grid_longitude")
+    status = nf90_put_att(ncid, XVarID, "units","degrees")
+    status = nf90_put_att(ncid, XVarID, "axis","X")
+    status = nf90_put_att(ncid, YVarID, "long_name","latitude in rotated pole grid")
+    status = nf90_put_att(ncid, YVarID, "standard_name","grid_latitude")
+    status = nf90_put_att(ncid, YVarID, "units","degrees")
+    status = nf90_put_att(ncid, YVarID, "axis","Y")
+    status = nf90_put_att(ncid, gmVarID, "grid_north_pole_latitude", pole_lat)
+    status = nf90_put_att(ncid, gmVarID, "grid_north_pole_longitude", pole_lon)
+end if
+status = nf90_put_att(ncid, gmVarID, "earth_radius", earth_radius)
+call handle_err(status)
+end subroutine def_horizontal_vars
+
+subroutine put_horizontal_vars(ncid, LonVarID, LatVarID, XVarID, YVarID)
+use netcdf
+integer, intent(in) :: ncid, LonVarID, LatVarID, XVarID, YVarID
+real(kind=8) :: xc(nlon), yc(nlat)
+
+status = nf90_put_var(ncid, LonVarID, lon)
+call handle_err(status)
+status = nf90_put_var(ncid, LatVarID, lat)
+call handle_err(status)
+if (trim(projection) == 'lambert_conformal_conic') then
+    call lambert_xy(xc, yc)
+    status = nf90_put_var(ncid, XVarID, xc)
+    call handle_err(status)
+    status = nf90_put_var(ncid, YVarID, yc)
+else
+    status = nf90_put_var(ncid, XVarID, rlon)
+    call handle_err(status)
+    status = nf90_put_var(ncid, YVarID, rlat)
+end if
+call handle_err(status)
+end subroutine put_horizontal_vars
+
+! x/y (m) of the grid columns/rows: lon/lat of the middle row/column projected
+! with the Lambert conformal conic formulas (sphere of radius earth_radius).
+subroutine lambert_xy(xc, yc)
+real(kind=8), intent(out) :: xc(nlon), yc(nlat)
+real(kind=8), parameter :: pi = 3.14159265358979d0, d2r = pi/180.d0
+real(kind=8) :: phi1, phi2, phi0, n, f, rho0, rho, th
+integer :: i, j, im, jm
+
+phi1 = truelat1*d2r; phi2 = truelat2*d2r; phi0 = cen_lat*d2r
+if (abs(truelat1 - truelat2) < 1.e-6) then
+    n = sin(phi1)
+else
+    n = log(cos(phi1)/cos(phi2)) / log(tan(pi/4 + phi2/2)/tan(pi/4 + phi1/2))
+end if
+f    = cos(phi1)*tan(pi/4 + phi1/2)**n / n
+rho0 = earth_radius*f / tan(pi/4 + phi0/2)**n
+
+jm = (nlat + 1)/2; im = (nlon + 1)/2
+do i = 1, nlon
+    rho = earth_radius*f / tan(pi/4 + dble(lat(i,jm))*d2r/2)**n
+    th  = n*(dble(lon(i,jm)) - stand_lon)*d2r
+    xc(i) = false_easting + rho*sin(th)
+end do
+do j = 1, nlat
+    rho = earth_radius*f / tan(pi/4 + dble(lat(im,j))*d2r/2)**n
+    th  = n*(dble(lon(im,j)) - stand_lon)*d2r
+    yc(j) = false_northing + rho0 - rho*cos(th)
+end do
+end subroutine lambert_xy
+!
+!-----------------------------------------------------------------------
+!
 subroutine write_netcdf_2D(uvar)
 use netcdf
 use datvar_s
@@ -175,18 +348,9 @@ real, parameter :: FillValue=1.e+20
 status = nf90_create(fnameout, IOR(IOR(nf90_noclobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
-status = nf90_def_dim(ncid, "rlon", nlon, LonDimID)
-status = nf90_def_dim(ncid, "rlat", nlat, LatDimID)
+call def_horizontal_dims(ncid, LonDimID, LatDimID)
 
-status = nf90_def_var(ncid, "lon", nf90_double, &
-                            (/ LonDimId, LatDimID /), LonVarId)
-status = nf90_def_var(ncid, "lat", nf90_double, &
-                            (/ LonDimId, LatDimID /), LatVarId)
-status = nf90_def_var(ncid, "rlon", nf90_double, &
-                            (/ LonDimId /), rlonVarId)
-status = nf90_def_var(ncid, "rlat", nf90_double, &
-                            (/ LatDimID /), rlatVarId)
-status = nf90_def_var(ncid, "rotated_latitude_longitude", nf90_char,rpVarId)
+call def_horizontal_vars(ncid, LonDimID, LatDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
 
 status = nf90_def_var(ncid, varname, nf90_float, &
                             (/ LonDimId, LatDimID /), uVarId)
@@ -203,54 +367,19 @@ call handle_err(status)
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
-status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_latitude_longitude")
+status = nf90_put_att(ncid, uVarID, "grid_mapping",trim(projection))
 status = nf90_put_att(ncid, uVarID, "coordinates","lat lon")
 status = nf90_put_att(ncid, uVarID, "cell_methods",cellmethods)
 status = nf90_put_att(ncid, uVarID, "cell_measures","area: areacella")
 status = nf90_put_att(ncid, uVarID, "_FillValue",huge_val)
 status = nf90_put_att(ncid, uVarID, "missing_value",huge_val)
 
-status = nf90_put_att(ncid, LonVarID, "long_name","longitude")
-status = nf90_put_att(ncid, LonVarID, "standard_name","longitude")
-status = nf90_put_att(ncid, LonVarID, "units","degrees_east")
-status = nf90_put_att(ncid, LonVarID, "_CoordinateAxisType","Lon")
-call handle_err(status)
-
-status = nf90_put_att(ncid, LatVarID, "long_name","latitude")
-status = nf90_put_att(ncid, LatVarID, "standard_name","latitude")
-status = nf90_put_att(ncid, LatVarID, "units","degrees_north")
-status = nf90_put_att(ncid, LatVarID, "_CoordinateAxisType","Lat")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rlonVarID, "long_name","longitude in rotated pole grid")
-status = nf90_put_att(ncid, rlonVarID, "standard_name","grid_longitude")
-status = nf90_put_att(ncid, rlonVarID, "units","degrees")
-status = nf90_put_att(ncid, rlonVarID, "axis","X")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rlatVarID, "long_name","latitude in rotated pole grid")
-status = nf90_put_att(ncid, rlatVarID, "standard_name","grid_latitude")
-status = nf90_put_att(ncid, rlatVarID, "units","degrees")
-status = nf90_put_att(ncid, rlatVarID, "axis","Y")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rpVarID, "grid_mapping_name","rotated_latitude_longitude")
-status = nf90_put_att(ncid, rpVarID, "grid_north_pole_latitude", 39.25 )
-status = nf90_put_att(ncid, rpVarID, "grid_north_pole_longitude", -162. )
-status = nf90_put_att(ncid, rpVarID, "earth_radius", earth_radius )
-call handle_err(status)
 
 call write_global_attributes
 
 status = nf90_enddef(ncid)
 
-status = nf90_put_var(ncid, LonVarId, lon )
-call handle_err(status)
-status = nf90_put_var(ncid, LatVarId, lat )
-call handle_err(status)
-status = nf90_put_var(ncid, rlonVarId, rlon )
-call handle_err(status)
-status = nf90_put_var(ncid, rlatVarId, rlat )
+call put_horizontal_vars(ncid, LonVarID, LatVarID, rlonVarID, rlatVarID)
 call handle_err(status)
 status = nf90_put_var(ncid, uVarId, uvar )
 call handle_err(status)
@@ -290,19 +419,14 @@ point = index(cellmethods, 'time: point') > 0
 status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
-status = nf90_def_dim(ncid, "rlon", nlon, LonDimID)
-status = nf90_def_dim(ncid, "rlat", nlat, LatDimID)
+call def_horizontal_dims(ncid, LonDimID, LatDimID)
 if (.not. point) status = nf90_def_dim(ncid, "bnds", 2, BDimID)
 status = nf90_def_dim(ncid, "time", nf90_unlimited, HDimID)
 
 status = nf90_def_var(ncid, "time", nf90_double, (/ HDimID /), TVarId)
 if (.not. point) status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
 
-status = nf90_def_var(ncid, "lon", nf90_double, (/ LonDimId, LatDimID /), LonVarId)
-status = nf90_def_var(ncid, "lat", nf90_double, (/ LonDimId, LatDimID /), LatVarId)
-status = nf90_def_var(ncid, "rlon", nf90_double, (/ LonDimId /), rlonVarId)
-status = nf90_def_var(ncid, "rlat", nf90_double, (/ LatDimID /), rlatVarId)
-status = nf90_def_var(ncid, "rotated_latitude_longitude", nf90_char,rpVarId)
+call def_horizontal_vars(ncid, LonDimID, LatDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
 
 ! Check for optional Z coordinate conditions
 if (height(1) > 0.0) then
@@ -332,7 +456,7 @@ status = nf90_put_att(ncid, TVarID, "axis","T")
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
-status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_latitude_longitude")
+status = nf90_put_att(ncid, uVarID, "grid_mapping",trim(projection))
 
 ! Dynamically update coordinates attribute string matching configuration state
 if (height(1) > 0.0) then
@@ -363,36 +487,6 @@ elseif (pressure(1) > 0.0) then
     status = nf90_put_att(ncid, HVarID, "units","Pa")
 end if
 
-status = nf90_put_att(ncid, LonVarID, "long_name","longitude")
-status = nf90_put_att(ncid, LonVarID, "standard_name","longitude")
-status = nf90_put_att(ncid, LonVarID, "units","degrees_east")
-status = nf90_put_att(ncid, LonVarID, "_CoordinateAxisType","Lon")
-call handle_err(status)
-
-status = nf90_put_att(ncid, LatVarID, "long_name","latitude")
-status = nf90_put_att(ncid, LatVarID, "standard_name","latitude")
-status = nf90_put_att(ncid, LatVarID, "units","degrees_north")
-status = nf90_put_att(ncid, LatVarID, "_CoordinateAxisType","Lat")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rlonVarID, "long_name","longitude in rotated pole grid")
-status = nf90_put_att(ncid, rlonVarID, "standard_name","grid_longitude")
-status = nf90_put_att(ncid, rlonVarID, "units","degrees")
-status = nf90_put_att(ncid, rlonVarID, "axis","X")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rlatVarID, "long_name","latitude in rotated pole grid")
-status = nf90_put_att(ncid, rlatVarID, "standard_name","grid_latitude")
-status = nf90_put_att(ncid, rlatVarID, "units","degrees")
-status = nf90_put_att(ncid, rlatVarID, "axis","Y")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rpVarID, "grid_mapping_name","rotated_latitude_longitude")
-status = nf90_put_att(ncid, rpVarID, "grid_north_pole_latitude", 39.25 )
-status = nf90_put_att(ncid, rpVarID, "grid_north_pole_longitude", -162. )
-! Updated to map the new shared module constant parameter directly
-status = nf90_put_att(ncid, rpVarID, "earth_radius", earth_radius )
-call handle_err(status)
 
 call write_global_attributes
 
@@ -404,13 +498,7 @@ if (.not. point) then
     status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
     call handle_err(status)
 end if
-status = nf90_put_var(ncid, LonVarId, lon )
-call handle_err(status)
-status = nf90_put_var(ncid, LatVarId, lat )
-call handle_err(status)
-status = nf90_put_var(ncid, rlonVarId, rlon )
-call handle_err(status)
-status = nf90_put_var(ncid, rlatVarId, rlat )
+call put_horizontal_vars(ncid, LonVarID, LatVarID, rlonVarID, rlatVarID)
 call handle_err(status)
 
 ! Write the values to the variable array if initialized
@@ -459,8 +547,7 @@ point = index(cellmethods, 'time: point') > 0
 status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
-status = nf90_def_dim(ncid, "rlon", nlon, LonDimID)
-status = nf90_def_dim(ncid, "rlat", nlat, LatDimID)
+call def_horizontal_dims(ncid, LonDimID, LatDimID)
 status = nf90_def_dim(ncid, "nsoil", nsoil, depth_dimid)
 status = nf90_def_dim(ncid, "bnds", 2, BDimID)
 status = nf90_def_dim(ncid, "time", nf90_unlimited, HDimID)
@@ -468,11 +555,7 @@ status = nf90_def_dim(ncid, "time", nf90_unlimited, HDimID)
 status = nf90_def_var(ncid, "time", nf90_double, (/ HDimID /), TVarId)
 if (.not. point) status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
 
-status = nf90_def_var(ncid, "lon", nf90_double, (/ LonDimId, LatDimID /), LonVarId)
-status = nf90_def_var(ncid, "lat", nf90_double, (/ LonDimId, LatDimID /), LatVarId)
-status = nf90_def_var(ncid, "rlon", nf90_double, (/ LonDimId /), rlonVarId)
-status = nf90_def_var(ncid, "rlat", nf90_double, (/ LatDimID /), rlatVarId)
-status = nf90_def_var(ncid, "rotated_latitude_longitude", nf90_char,rpVarId)
+call def_horizontal_vars(ncid, LonDimID, LatDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
 
 status = nf90_def_var(ncid, "sdepth", nf90_double, (/ depth_dimid /), SVarId)
 status = nf90_def_var(ncid, "sdepth_bnds", nf90_double, (/ BDimID, depth_dimid /), SBVarId)
@@ -506,43 +589,13 @@ status = nf90_put_att(ncid, SVarId, "axis", "Z")
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
-status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_latitude_longitude")
+status = nf90_put_att(ncid, uVarID, "grid_mapping",trim(projection))
 status = nf90_put_att(ncid, uVarID, "coordinates","lat lon time")
 status = nf90_put_att(ncid, uVarID, "cell_methods",cellmethods)
 status = nf90_put_att(ncid, uVarID, "cell_measures","area: areacella")
 status = nf90_put_att(ncid, uVarID, "_FillValue",huge_val)
 status = nf90_put_att(ncid, uVarID, "missing_value",huge_val)
 
-status = nf90_put_att(ncid, LonVarID, "long_name","longitude")
-status = nf90_put_att(ncid, LonVarID, "standard_name","longitude")
-status = nf90_put_att(ncid, LonVarID, "units","degrees_east")
-status = nf90_put_att(ncid, LonVarID, "_CoordinateAxisType","Lon")
-call handle_err(status)
-
-status = nf90_put_att(ncid, LatVarID, "long_name","latitude")
-status = nf90_put_att(ncid, LatVarID, "standard_name","latitude")
-status = nf90_put_att(ncid, LatVarID, "units","degrees_north")
-status = nf90_put_att(ncid, LatVarID, "_CoordinateAxisType","Lat")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rlonVarID, "long_name","longitude in rotated pole grid")
-status = nf90_put_att(ncid, rlonVarID, "standard_name","grid_longitude")
-status = nf90_put_att(ncid, rlonVarID, "units","degrees")
-status = nf90_put_att(ncid, rlonVarID, "axis","X")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rlatVarID, "long_name","latitude in rotated pole grid")
-status = nf90_put_att(ncid, rlatVarID, "standard_name","grid_latitude")
-status = nf90_put_att(ncid, rlatVarID, "units","degrees")
-status = nf90_put_att(ncid, rlatVarID, "axis","Y")
-call handle_err(status)
-
-status = nf90_put_att(ncid, rpVarID, "grid_mapping_name","rotated_latitude_longitude")
-status = nf90_put_att(ncid, rpVarID, "grid_north_pole_latitude", 39.25 )
-status = nf90_put_att(ncid, rpVarID, "grid_north_pole_longitude", -162. )
-! Updated to map the new shared module constant parameter directly
-status = nf90_put_att(ncid, rpVarID, "earth_radius", earth_radius )
-call handle_err(status)
 
 call write_global_attributes
 
@@ -554,13 +607,7 @@ if (.not. point) then
     status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
     call handle_err(status)
 end if
-status = nf90_put_var(ncid, LonVarId, lon )
-call handle_err(status)
-status = nf90_put_var(ncid, LatVarId, lat )
-call handle_err(status)
-status = nf90_put_var(ncid, rlonVarId, rlon )
-call handle_err(status)
-status = nf90_put_var(ncid, rlatVarId, rlat )
+call put_horizontal_vars(ncid, LonVarID, LatVarID, rlonVarID, rlatVarID)
 call handle_err(status)
 ! depth coordinate = middle of each soil layer (sdepth holds the layer thicknesses)
 status = nf90_put_var(ncid, SVarID, anint(5.d5*(dble(sdepth_bounds(1,:))+dble(sdepth_bounds(2,:))))/1.d6 )

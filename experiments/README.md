@@ -27,6 +27,14 @@ The `&cordex_config` namelist. Set:
 
 - **Domain & geography** — the grid dimensions (`nz`/`nlon`/`nlat`/`xoffset`/`yoffset`) and the matching `geog` name.
 - **Naming conventions** — `dom`/`outdom`, the domain and model names used in the CMORised output filenames.
+- **Map projection** — `projection`, the CF name of the output grid's projection, plus its parameters. It sets the 1-D coordinates and the grid-mapping variable (named after the projection) in every output file; the job stops if it is missing.
+
+  | `projection` | Parameters | Written to the files |
+  |---|---|---|
+  | `'rotated_latitude_longitude'` | `pole_lat`, `pole_lon` (required) | `rlon`/`rlat` (degrees), `grid_north_pole_latitude`/`_longitude` |
+  | `'lambert_conformal_conic'` | `truelat1`, `truelat2`, `stand_lon`, `cen_lat`, optional `false_easting`/`false_northing` (m, default 0) | `x`/`y` (m), `standard_parallel`, `longitude_of_central_meridian`, `latitude_of_projection_origin` |
+
+  For Lambert, any of `truelat1`, `truelat2`, `stand_lon`, `cen_lat` left out is read from the geo_em file (WRF's `TRUELAT1`, `TRUELAT2`, `STAND_LON`, `MOAD_CEN_LAT`), so `projection = 'lambert_conformal_conic'` alone is usually enough. Both write `lon`/`lat` and `earth_radius` (6370000 m, WRF's sphere). Keep the global ini's `grid` description consistent with it.
 
 Leave these placeholders as they are — `run_out_generic.sh` fills them in for each job:
 
