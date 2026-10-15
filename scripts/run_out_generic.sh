@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # scripts/run_out_generic.sh — process one varset, then archive and chain.
-# Usage: ./submit.sh [sbatch options] run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>
+# Usage: ./submit.sh run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>
 # See README.md §6, §8 and §0.
 #----------------------------------------------------------------
 
@@ -122,22 +122,18 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
 done #year
 
 #--- Archive job(s): this varset, plus its CP_EXTRA companion ---
- ${REPO_DIR}/submit.sh --job-name="cp-${VARSET}" --time="${CP_TIME[$VARSET]:-$DEFAULT_CP_TIME}" \
-       --output="cp-${VARSET}.%j.out" --error="cp-${VARSET}.%j.out" \
-       "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${VARSET}"
+ ${REPO_DIR}/submit.sh "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${VARSET}"
 
 extra="${CP_EXTRA[$VARSET]:-}"
 if [ -n "${extra}" ]; then
-  ${REPO_DIR}/submit.sh --job-name="cp-${extra}" --time="${CP_TIME[$extra]:-$DEFAULT_CP_TIME}" \
-         --output="cp-${extra}.%j.out" --error="cp-${extra}.%j.out" \
-         "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${extra}"
+  ${REPO_DIR}/submit.sh "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${extra}"
 fi
 
 #--- Chain to the next varset (NEXT[], ADVANCE_YEAR[]) ----------
 next="${NEXT[$VARSET]}"
 if [ "${ADVANCE_YEAR[$VARSET]:-0}" = "1" ]; then
   chain_ok=0
-  [ "$yeari" -lt "$year_lim" ] && chain_ok=1
+  [ "$yearf" -lt "$year_lim" ] && chain_ok=1
 else
   chain_ok=0
   [ "$yeari" -le "$year_lim" ] && chain_ok=1
@@ -146,12 +142,12 @@ fi
 if [ -n "${next}" ] && [ "$chain_ok" = "1" ]; then
   next_datebeg="${datebeg}"
   next_dateend="${dateend}"
+  # Advancing link: next block of the same length, after this one, up to year_lim
   if [ "${ADVANCE_YEAR[$VARSET]:-0}" = "1" ]; then
-    next_datebeg=$(( yeari + 1 ))
-    next_dateend=$(( yearf + 1 ))
+    next_datebeg=$(( yearf + 1 ))
+    next_dateend=$(( yearf + 1 + yearf - yeari ))
+    [ "$next_dateend" -gt "$year_lim" ] && next_dateend="$year_lim"
   fi
-  ${REPO_DIR}/submit.sh --job-name="wrf-${next}" --time="${TIME[$next]}" --mem="${MEM[$next]:-$DEFAULT_MEM}" \
-         --output="wrf-${next}.%j.out" --error="wrf-${next}.%j.out" \
-         "run_out_generic.sh" "${next_datebeg}" "${next_dateend}" "${year_lim}" "${next}"
+  ${REPO_DIR}/submit.sh "run_out_generic.sh" "${next_datebeg}" "${next_dateend}" "${year_lim}" "${next}"
 fi
 echo "$0 (${VARSET}) done."

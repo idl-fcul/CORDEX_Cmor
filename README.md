@@ -60,10 +60,13 @@ submit it directly:
 
 ```bash
 # soil for 1990 only
-./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
-       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 19900101 19901231 1990 soil
+./submit.sh run_out_generic.sh 19900101 19901231 1990 soil
 ```
+
+`submit.sh` takes the job name, time limit, memory and log files from
+`config/varsets.sh`, exactly as for `run_analysis.sh` (§6). To change one
+for this submission, add it before the script name, written as
+`--option=value`, e.g. `./submit.sh --time=02:00:00 run_out_generic.sh ...`.
 
 With the normal `config/varsets.sh`, most varsets hand over to the next
 varset of their stream when they finish (soil → out2, …), so do this with
@@ -112,10 +115,24 @@ Then submit the varset for its first year, with the last year as
 
 ```bash
 # soil, 2001 to 2005, one year per job
-./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
-       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 20010101 20011231 2005 soil
+./submit.sh run_out_generic.sh 20010101 20011231 2005 soil
 ```
+
+Or process all the years **in one job**: give the end year as `dateend`
+and set `year_lim` to that same end year, so the job doesn't resubmit
+itself afterwards:
+
+```bash
+# soil, 2001 to 2005, all in one job (~5h per year)
+./submit.sh --time=32:00:00 run_out_generic.sh 20010101 20051231 2005 soil
+```
+
+The `TIME[]` limits in `config/varsets.sh` are for **one** year, so give
+the job a longer `--time` yourself (about the number of years × the
+one-year time, plus a margin), within the queue's maximum walltime — split
+long periods into a few jobs. If `year_lim` is later than `dateend`, the
+job resubmits itself for the next block of the same length (2006–2010
+here, cut off at `year_lim`).
 
 `run_analysis.sh` works with `varsets_single.sh` too, but its `ORDER` is
 empty by default: each entry starts its own loop and they all run at
@@ -373,8 +390,8 @@ can't load them from a file itself; instead every job is submitted through
 on the `sbatch` command line. That includes the jobs the scripts submit
 for each other, so **submit your first job through `submit.sh` too**
 (§0) — a job started with plain `sbatch` won't get these settings.
-Per-job settings (`--job-name`, `--time`, `--mem`, `--output`) come from
-`config/varsets.sh`.
+Per-job settings come from `config/varsets.sh`, also through
+`submit.sh` (step 5 below).
 
 The 3 scripts are fully generic — you should not need to edit them.
 
@@ -388,8 +405,21 @@ The 3 scripts are fully generic — you should not need to edit them.
    `env.site.sh` don't leak into the job's environment.
 4. Checks the experiment folder exists, then passes `ROOT_DIR` and the
    experiment (as `CMOR_EXPERIMENT`, §2) to the job.
-5. Calls `sbatch` with the `JOB_*` flags first and your own flags after,
-   skipping any `JOB_*` flag you already gave, so your flags win.
+5. For `run_out_generic.sh` and `run_cp_generic.sh`, looks up the varset
+   (their 4th argument) in `config/varsets.sh` and adds its per-job flags:
+
+   | Flag | Processing job (`run_out_generic.sh`) | Archive job (`run_cp_generic.sh`) |
+   |---|---|---|
+   | `--job-name` | `wrf-<varset>` | `cp-<varset>` |
+   | `--time` | `TIME[<varset>]` | `CP_TIME[<varset>]`, else `DEFAULT_CP_TIME` |
+   | `--mem` | `MEM[<varset>]`, else `DEFAULT_MEM` | — |
+   | `--output`, `--error` | `wrf-<varset>.%j.out` | `cp-<varset>.%j.out` |
+
+   An unknown varset stops with an error.
+6. Calls `sbatch` with these flags first and your own flags after,
+   skipping any flag you already gave, so your flags win. Write your
+   flags as `--option=value` (a value after a space would be read as the
+   script name).
 
 **What a processing job (`run_out_generic.sh`) does:**
 
@@ -454,10 +484,14 @@ full round-trip, not per hop.
 
 `year_lim` decides when a stream stops:
 
-- the **advancing** link only resubmits if `yeari < year_lim`, so it runs
-  `year_lim` once and then stops instead of starting `year_lim + 1`;
-- the **other** links resubmit while `yeari <= year_lim`, so they always
-  run `year_lim` too — the advancing link is the one that ends the stream.
+- the **advancing** link only resubmits if the last year it processed
+  (`yearf`, from `dateend`) is before `year_lim`, so it runs `year_lim`
+  once and then stops instead of starting `year_lim + 1`. It resubmits for
+  the next block of the same length (one year for normal jobs), cut off at
+  `year_lim`;
+- the **other** links resubmit while their first year (`yeari`, from
+  `datebeg`) is `<= year_lim`, with the same dates, so they always run
+  `year_lim` too — the advancing link is the one that ends the stream.
 
 To rebalance (e.g. after run times change), run `report_walltimes.sh` and
 move variables between varsets: every program runs once per variable or

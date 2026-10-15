@@ -27,7 +27,7 @@ for the walkthrough. This file goes one level deeper into the mechanics.
 | `TIME[]` | varset name | `--time` walltime for that varset's **processing** job |
 | `MEM[]` / `DEFAULT_MEM` | varset name | `--mem` for that varset's **processing** job (falls back to `DEFAULT_MEM`, 8G, if unset) |
 | `CP_TIME[]` / `DEFAULT_CP_TIME` | varset name | `--time` walltime for that varset's **archive** job (falls back to the default if unset) |
-| `ADVANCE_YEAR[]` | varset name | `1` if this varset's own script increments `yeari`/`yearf` by 1 before resubmitting; unset/`0` otherwise |
+| `ADVANCE_YEAR[]` | varset name | `1` if this varset moves on to the next year(s) before resubmitting; unset/`0` otherwise |
 | `NEXT[]` | varset name | which varset to auto-resubmit once this one finishes (empty/unset = don't chain) |
 | `CP_EXTRA[]` | varset name | an additional varset to archive alongside this one (see "uava" u+v note below) |
 | `ORDER` | — (plain array) | the varsets `run_analysis.sh` submits directly, in order |
@@ -150,10 +150,11 @@ ECMWF) are listed. A program keeps the whole year of its output in memory:
 2. It then **unconditionally** submits `run_cp_generic.sh` for the same
    varset (archiving) — and a second time for `CP_EXTRA[<varset>]` if set.
 3. It then checks `NEXT[<varset>]`. If set, and if `yeari <= year_lim`
-   (where `yeari` is derived from `datebeg`, not from the internal
-   per-year loop), it resubmits itself for that next varset — advancing
-   the year first if `ADVANCE_YEAR[<varset>]=1`. The advancing link uses
-   `yeari < year_lim` instead, so the stream stops after `year_lim`.
+   (`yeari` is the year of `datebeg`), it submits that next varset for
+   the same dates. If `ADVANCE_YEAR[<varset>]=1`, it instead checks
+   `yearf < year_lim` (`yearf` is the year of `dateend`) and submits the
+   next block of years, the same length as this one, cut off at
+   `year_lim` — so the stream stops after `year_lim`.
 
 Step 3 is the chaining: it runs each stream year after year
 (`rad→out1→rad`, self-loops like `zlev_uava0`, etc. — see the main README
@@ -196,15 +197,12 @@ scheduling/chaining or not:
   membership) keeps working unchanged.
 - **Add a new, smaller varset:** give it its own entry, e.g.
   `[my_few]="RCM_sfc_VAR:tas,pr"`, plus a `TIME[my_few]` entry (required —
-  it's read either by your own manual `submit.sh --time=...` or, if something
-  chains into it, by the resubmitting script via `TIME[$next]`). You do
+  `submit.sh` uses it as the job's `--time`). You do
   **not** need to add it to `ORDER` or `NEXT[]` if you're only ever going
   to submit it manually:
 
   ```bash
-  ./submit.sh --job-name=wrf-my_few --time=04:00:00 --mem=8G \
-         --output=wrf-my_few.%j.out --error=wrf-my_few.%j.out \
-         run_out_generic.sh 19900101 19901231 1990 my_few
+  ./submit.sh run_out_generic.sh 19900101 19901231 1990 my_few
   ```
 
   `CP_TIME[my_few]` and `MEM[my_few]` are optional (they fall back to
