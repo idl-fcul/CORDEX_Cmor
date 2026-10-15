@@ -660,7 +660,8 @@ For each variable and year it needs all 12 monthly files
 default it also brings the metadata up to the current write routines
 (values from the global ini given with `-g`): global attributes,
 `tracking_id`, `history`, the `rotated_latitude_longitude` grid mapping,
-time in days with `calendar`, soil depth at the layer middles, NetCDF-4
+time in days with `calendar` (and no `time_bnds`, as these are
+instantaneous variables), soil depth at the layer middles, NetCDF-4
 classic with deflate level 1. The result is the same as running the new
 yearly program.
 

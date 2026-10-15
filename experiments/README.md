@@ -53,7 +53,7 @@ The `&global_metadata` namelist: global (file-level) CF/CMOR attributes written 
 
 - `creation_date` — the time the file is written, in UTC (`YYYY-MM-DDThh:mm:ssZ`).
 - `tracking_id` — `hdl:21.14103/<UUID>`, a new random UUID (version 4) for every file, so there is no need to add it afterwards with cdo.
-- `history` — `<creation time>;rewrote data to be consistent with correct frequency <frequency> for variable <variable> found in table CORDEX-CMIP6_<frequency>.`
+- `history` — `<creation time>;rewrote data to be consistent with <activity_id> for variable <variable> found in table CORDEX-CMIP6_<frequency>.` (activity_id from the ini, e.g. DD)
 - `frequency` — set by each program: `1hr` (or `6hr`) for most, `day` for the daily extremes, `fx` for the fixed fields.
 - `source` — the ini's `source_desc`, which must match a `source` entry for your `source_id` in the CV.
 - `external_variables` — `areacella` (the cell area referred to by `cell_measures`).

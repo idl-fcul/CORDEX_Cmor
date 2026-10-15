@@ -91,7 +91,7 @@ step() {
 }
 
 # (header read into a variable first: grep -q on a pipe would make ncks fail under pipefail)
-has_var() { local h; h=$(ncks -m "$2" 2>/dev/null); grep -qE "^[[:space:]]+[a-z0-9]+ $1 ;" <<< "$h"; }
+has_var() { local h; h=$(ncks -m "$2" 2>/dev/null); grep -qE "^[[:space:]]+[a-z0-9]+ $1( ;|\()" <<< "$h"; }
 has_att() { local h; h=$(ncks -M -m "$2" 2>/dev/null); grep -q "$1 = " <<< "$h"; }
 
 time_val() {   # time_val <file> <index>
@@ -105,7 +105,7 @@ time_val() {   # time_val <file> <index>
 #
 work() {   # work <var> <tmp file> <monthly files>...
   local var="$1" f="$2"; shift 2
-  local units ref now hist
+  local units ref now hist cm
   step ncrcat -O "$@" "$f" || return 1
 
   if [ "$MERGE_ONLY" = 0 ]; then
@@ -128,7 +128,7 @@ work() {   # work <var> <tmp file> <monthly files>...
     step ncap2 -O -h -s 'sdepth_bnds=rint(1.0e6*double(sdepth_bnds))/1.0e6;sdepth=rint(5.0e5*(sdepth_bnds(:,0)+sdepth_bnds(:,1)))/1.0e6' "$f" "$f" || return 1
 
     now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    hist="${now};rewrote data to be consistent with correct frequency 6hr for variable ${var} found in table CORDEX-CMIP6_6hr."
+    hist="${now};rewrote data to be consistent with $(ini_val activity_id) for variable ${var} found in table CORDEX-CMIP6_6hr."
     step ncatted -O -h \
       -a "grid_mapping,${var},o,c,rotated_latitude_longitude" \
       -a earth_radius,rotated_latitude_longitude,o,f,6370000. \
@@ -147,6 +147,14 @@ work() {   # work <var> <tmp file> <monthly files>...
       -a external_variables,global,o,c,"areacella" \
       -a frequency,global,o,c,"6hr" \
       "$f" || return 1
+
+    # instantaneous variables (cell_methods "time: point") have no time bounds
+    cm=$(ncks -m -v "$var" "$f" | sed -n "s/.*${var}:cell_methods = \"\(.*\)\".*/\1/p" | sed -n '1p')
+    if [[ "$cm" == *"time: point"* ]] && has_var time_bnds "$f"; then
+      step ncatted -O -h -a bounds,time,d,, "$f" || return 1
+      step ncks -O -h -C -x -v time_bnds "$f" "${f%.nc}_nb.nc" || return 1
+      mv "${f%.nc}_nb.nc" "$f"
+    fi
   fi
 
   # NetCDF-4 classic, deflate level 1 with shuffle, one time step per chunk
