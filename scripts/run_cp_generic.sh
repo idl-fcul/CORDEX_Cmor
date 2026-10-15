@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # scripts/run_cp_generic.sh — archive one varset's output to ECFS and the remote server.
-# Usage: ./submit.sh [sbatch options] run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
+# Usage: ./submit.sh run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
 # Normally submitted by run_out_generic.sh. See README.md §7.
 #----------------------------------------------------------------
 

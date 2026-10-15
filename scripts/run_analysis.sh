@@ -41,9 +41,7 @@ fi
 
 #--- Submit each ORDER entry, 120 s apart -----------------------
 for vs in "${ORDER[@]}"; do
-  ${REPO_DIR}/submit.sh --job-name="wrf-${vs}" --time="${TIME[$vs]}" --mem="${MEM[$vs]:-$DEFAULT_MEM}" \
-         --output="wrf-${vs}.%j.out" --error="wrf-${vs}.%j.out" \
-         "run_out_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${vs}"
+  ${REPO_DIR}/submit.sh "run_out_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${vs}"
   sleep 120
 done
 

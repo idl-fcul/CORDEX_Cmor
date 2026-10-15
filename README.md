@@ -60,10 +60,13 @@ submit it directly:
 
 ```bash
 # soil for 1990 only
-./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
-       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 19900101 19901231 1990 soil
+./submit.sh run_out_generic.sh 19900101 19901231 1990 soil
 ```
+
+`submit.sh` takes the job name, time limit, memory and log files from
+`config/varsets.sh`, exactly as for `run_analysis.sh` (§6). To change one
+for this submission, add it before the script name, written as
+`--option=value`, e.g. `./submit.sh --time=02:00:00 run_out_generic.sh ...`.
 
 With the normal `config/varsets.sh`, most varsets hand over to the next
 varset of their stream when they finish (soil → out2, …), so do this with
@@ -112,9 +115,7 @@ Then submit the varset for its first year, with the last year as
 
 ```bash
 # soil, 2001 to 2005, one year per job
-./submit.sh --job-name=wrf-soil --time=12:00:00 --mem=8G \
-       --output=wrf-soil.%j.out --error=wrf-soil.%j.out \
-       run_out_generic.sh 20010101 20011231 2005 soil
+./submit.sh run_out_generic.sh 20010101 20011231 2005 soil
 ```
 
 `run_analysis.sh` works with `varsets_single.sh` too, but its `ORDER` is
@@ -373,8 +374,8 @@ can't load them from a file itself; instead every job is submitted through
 on the `sbatch` command line. That includes the jobs the scripts submit
 for each other, so **submit your first job through `submit.sh` too**
 (§0) — a job started with plain `sbatch` won't get these settings.
-Per-job settings (`--job-name`, `--time`, `--mem`, `--output`) come from
-`config/varsets.sh`.
+Per-job settings come from `config/varsets.sh`, also through
+`submit.sh` (step 5 below).
 
 The 3 scripts are fully generic — you should not need to edit them.
 
@@ -388,8 +389,21 @@ The 3 scripts are fully generic — you should not need to edit them.
    `env.site.sh` don't leak into the job's environment.
 4. Checks the experiment folder exists, then passes `ROOT_DIR` and the
    experiment (as `CMOR_EXPERIMENT`, §2) to the job.
-5. Calls `sbatch` with the `JOB_*` flags first and your own flags after,
-   skipping any `JOB_*` flag you already gave, so your flags win.
+5. For `run_out_generic.sh` and `run_cp_generic.sh`, looks up the varset
+   (their 4th argument) in `config/varsets.sh` and adds its per-job flags:
+
+   | Flag | Processing job (`run_out_generic.sh`) | Archive job (`run_cp_generic.sh`) |
+   |---|---|---|
+   | `--job-name` | `wrf-<varset>` | `cp-<varset>` |
+   | `--time` | `TIME[<varset>]` | `CP_TIME[<varset>]`, else `DEFAULT_CP_TIME` |
+   | `--mem` | `MEM[<varset>]`, else `DEFAULT_MEM` | — |
+   | `--output`, `--error` | `wrf-<varset>.%j.out` | `cp-<varset>.%j.out` |
+
+   An unknown varset stops with an error.
+6. Calls `sbatch` with these flags first and your own flags after,
+   skipping any flag you already gave, so your flags win. Write your
+   flags as `--option=value` (a value after a space would be read as the
+   script name).
 
 **What a processing job (`run_out_generic.sh`) does:**
 
