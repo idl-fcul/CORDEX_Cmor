@@ -276,6 +276,7 @@ real, dimension(mtime) :: utime
 real, dimension(nlon,nlat,mtime) :: uvar
 character(len=40) :: day_units
 real(kind=8) :: tfac
+logical :: point
 
 ! Time axis in days since <iniyear>-01-01T00:00:00Z: values that the
 ! programs count in hours are divided by 24 (tfac), daily ones are kept.
@@ -283,16 +284,19 @@ day_units = 'days since '//ayearini//'-01-01T00:00:00Z'
 tfac = 1.d0
 if (timeunits(1:5) == 'hours') tfac = 24.d0
 
+! Instantaneous variables (cell_methods "time: point") have no time bounds
+point = index(cellmethods, 'time: point') > 0
+
 status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
 status = nf90_def_dim(ncid, "rlon", nlon, LonDimID)
 status = nf90_def_dim(ncid, "rlat", nlat, LatDimID)
-status = nf90_def_dim(ncid, "bnds", 2, BDimID)
+if (.not. point) status = nf90_def_dim(ncid, "bnds", 2, BDimID)
 status = nf90_def_dim(ncid, "time", nf90_unlimited, HDimID)
 
 status = nf90_def_var(ncid, "time", nf90_double, (/ HDimID /), TVarId)
-status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
+if (.not. point) status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
 
 status = nf90_def_var(ncid, "lon", nf90_double, (/ LonDimId, LatDimID /), LonVarId)
 status = nf90_def_var(ncid, "lat", nf90_double, (/ LonDimId, LatDimID /), LatVarId)
@@ -304,7 +308,7 @@ status = nf90_def_var(ncid, "rotated_latitude_longitude", nf90_char,rpVarId)
 if (height(1) > 0.0) then
     status = nf90_def_var(ncid, "height", nf90_double, HVarId)
 elseif (pressure(1) > 0.0) then
-    status = nf90_def_var(ncid, "press", nf90_double, HVarId)
+    status = nf90_def_var(ncid, "plev", nf90_double, HVarId)
 end if
 
 status = nf90_def_var(ncid, varname, nf90_float, (/ LonDimId, LatDimID, HDimID /), uVarId)
@@ -320,7 +324,7 @@ call handle_err(status)
 
 status = nf90_put_att(ncid, TVarID, "standard_name","time")
 status = nf90_put_att(ncid, TVarID, "long_name","time")
-status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
+if (.not. point) status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
 status = nf90_put_att(ncid, TVarID, "units",trim(day_units))
 status = nf90_put_att(ncid, TVarID, "calendar","standard")
 status = nf90_put_att(ncid, TVarID, "axis","T")
@@ -334,7 +338,7 @@ status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_latitude_longitude")
 if (height(1) > 0.0) then
     status = nf90_put_att(ncid, uVarID, "coordinates","lat lon time height")
 elseif (pressure(1) > 0.0) then
-    status = nf90_put_att(ncid, uVarID, "coordinates","lat lon time press")
+    status = nf90_put_att(ncid, uVarID, "coordinates","lat lon time plev")
 else
     status = nf90_put_att(ncid, uVarID, "coordinates","lat lon time")
 end if
@@ -356,7 +360,7 @@ elseif (pressure(1) > 0.0) then
     status = nf90_put_att(ncid, HVarID, "standard_name","air_pressure")
     status = nf90_put_att(ncid, HVarID, "positive","down")
     status = nf90_put_att(ncid, HVarID, "axis","Z")
-    status = nf90_put_att(ncid, HVarID, "units","hPa")
+    status = nf90_put_att(ncid, HVarID, "units","Pa")
 end if
 
 status = nf90_put_att(ncid, LonVarID, "long_name","longitude")
@@ -396,8 +400,10 @@ status = nf90_enddef(ncid)
 
 status = nf90_put_var(ncid, TVarId, dble(utime)/tfac )
 call handle_err(status)
-status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
-call handle_err(status)
+if (.not. point) then
+    status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
+    call handle_err(status)
+end if
 status = nf90_put_var(ncid, LonVarId, lon )
 call handle_err(status)
 status = nf90_put_var(ncid, LatVarId, lat )
@@ -412,7 +418,7 @@ if (height(1) > 0.0) then
     status = nf90_put_var(ncid, HVarID, height )
     call handle_err(status)
 elseif (pressure(1) > 0.0) then
-    status = nf90_put_var(ncid, HVarID, pressure )
+    status = nf90_put_var(ncid, HVarID, dble(pressure)*100.d0 )   ! hPa -> Pa
     call handle_err(status)
 end if
 
@@ -439,12 +445,16 @@ real, dimension(mtime) :: utime
 real, dimension(nlon,nlat,nsoil,mtime) :: uvar
 character(len=40) :: day_units
 real(kind=8) :: tfac
+logical :: point
 
 ! Time axis in days since <iniyear>-01-01T00:00:00Z: values that the
 ! programs count in hours are divided by 24 (tfac), daily ones are kept.
 day_units = 'days since '//ayearini//'-01-01T00:00:00Z'
 tfac = 1.d0
 if (timeunits(1:5) == 'hours') tfac = 24.d0
+
+! Instantaneous variables (cell_methods "time: point") have no time bounds
+point = index(cellmethods, 'time: point') > 0
 
 status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
@@ -456,7 +466,7 @@ status = nf90_def_dim(ncid, "bnds", 2, BDimID)
 status = nf90_def_dim(ncid, "time", nf90_unlimited, HDimID)
 
 status = nf90_def_var(ncid, "time", nf90_double, (/ HDimID /), TVarId)
-status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
+if (.not. point) status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
 
 status = nf90_def_var(ncid, "lon", nf90_double, (/ LonDimId, LatDimID /), LonVarId)
 status = nf90_def_var(ncid, "lat", nf90_double, (/ LonDimId, LatDimID /), LatVarId)
@@ -480,7 +490,7 @@ call handle_err(status)
 
 status = nf90_put_att(ncid, TVarID, "standard_name","time")
 status = nf90_put_att(ncid, TVarID, "long_name","time")
-status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
+if (.not. point) status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
 status = nf90_put_att(ncid, TVarID, "units",trim(day_units))
 status = nf90_put_att(ncid, TVarID, "calendar","standard")
 status = nf90_put_att(ncid, TVarID, "axis","T")
@@ -540,8 +550,10 @@ status = nf90_enddef(ncid)
 
 status = nf90_put_var(ncid, TVarId, dble(utime)/tfac )
 call handle_err(status)
-status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
-call handle_err(status)
+if (.not. point) then
+    status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
+    call handle_err(status)
+end if
 status = nf90_put_var(ncid, LonVarId, lon )
 call handle_err(status)
 status = nf90_put_var(ncid, LatVarId, lat )
