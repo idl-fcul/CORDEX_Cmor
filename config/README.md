@@ -141,6 +141,7 @@ ECMWF) are listed. A program keeps the whole year of its output in memory:
 |---|---|
 | one hourly variable, 424 × 412 × 8760 × 4 bytes | 6.1 GB (fits in 8G) |
 | `zlev_uava`: ua and va, both hourly | 12.2 GB (needs 16G) |
+| `soil`: one 6-hourly 4-layer variable, 424 × 412 × 4 × 1460 × 4 bytes | 4.1 GB, plus read buffers (set to 16G) |
 
 ## How a run actually flows
 

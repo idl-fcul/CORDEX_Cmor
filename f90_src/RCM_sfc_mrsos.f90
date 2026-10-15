@@ -165,7 +165,7 @@ freq='1hr'
 frequency=trim(adjustl(freq))
 
 ! Create output filename based on metadata
-outfile=trim(dir2)//trim(vaid)//trim(outdom)//trim(freq)//'_'//ayeari//amonthi//adayi//ahouri//'-'//ayearf//amonthf//adayf//ahourf//'.nc'
+outfile=trim(dir2)//trim(vaid)//trim(outdom)//trim(freq)//'_'//trim(time_label(ttime(1),ttime(ntime)))//'.nc'
 fnameout=trim(adjustl(outfile))
 
 if (factor /= 0.) outvar_h = outvar_h * factor

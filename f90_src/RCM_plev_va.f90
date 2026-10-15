@@ -7,8 +7,6 @@ implicit none
 real :: u_unstag, v_unstag
 integer :: ix, iy
 
-cp = (7.0/2.0) * Rd
-
 ! Read configuration using shared_subs subroutine
 call init_cordex_environment
 
@@ -264,8 +262,8 @@ subroutine write_dual_output
   p_str = adjustl(pad_int(p_val, 1))
 
   ! Build unique system output targets natively using context pressure levels
-  fnameout_u = trim(dir2)//'ua'//trim(p_str)//trim(outdom)//trim(freq)//'_'//ayeari//amonthi//adayi//ahouri//'-'//ayearf//amonthf//adayf//ahourf//'.nc'
-  fnameout_v = trim(dir2)//'va'//trim(p_str)//trim(outdom)//trim(freq)//'_'//ayeari//amonthi//adayi//ahouri//'-'//ayearf//amonthf//adayf//ahourf//'.nc'
+  fnameout_u = trim(dir2)//'ua'//trim(p_str)//trim(outdom)//trim(freq)//'_'//trim(time_label(ttime(1),ttime(ntime)))//'.nc'
+  fnameout_v = trim(dir2)//'va'//trim(p_str)//trim(outdom)//trim(freq)//'_'//trim(time_label(ttime(1),ttime(ntime)))//'.nc'
 
   if (factor /= 0.0) then
     outvar_h_u = outvar_h_u * factor

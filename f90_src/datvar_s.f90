@@ -8,7 +8,7 @@ integer, parameter :: nseason = 4
 integer, parameter :: tmonths = 12
 
 ! --- Physical & Environmental Constants ---
-real, parameter :: earth_radius      = 6372795.0    
+real, parameter :: earth_radius      = 6370000.0     ! WRF sphere radius (m)
 real, parameter :: epsilon           = 0.6220         
 real, parameter :: Rd                = 287.04
 real, parameter :: g                 = 9.81

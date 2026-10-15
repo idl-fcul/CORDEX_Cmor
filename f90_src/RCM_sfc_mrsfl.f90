@@ -70,6 +70,13 @@ do year = yeari, yearf,1
       days = days1
       mydays = 365
   endif
+  ! One file per year: 4 records (6-hourly) per day, from imonth to nmonths
+  issh=0
+  ntime=sum(days(imonth:nmonths))*4
+  allocate(ttime(ntime))
+  allocate(bdtime(2, ntime))
+  allocate(outvar_h_4d(nlon, nlat, nsoil, ntime))
+
 !  ntime = mydays * nhours
 
 !  if (ihour > 0) then
@@ -80,14 +87,6 @@ do year = yeari, yearf,1
   ! Loop over months
   do month = imonth, nmonths
 !
-    issh=0
-    ndays=days(month)
-    ntime=ndays*4
-
-    allocate(ttime(ntime))
-    allocate(bdtime(2, ntime))
-    allocate(outvar_h_4d(nlon, nlat, nsoil, ntime))
-
     ndays = days(month)
     amonth = pad_int(month, 2)
 
@@ -143,13 +142,13 @@ do year = yeari, yearf,1
 !
     enddo             ! end day
 
-  ! Write monthly output using shared subroutine
-    write(ayearf, '(i4)') year
-    write(ayeari, '(i4)') year
-
-    call write_output
   enddo               ! end month
 
+  ! Write yearly output using shared subroutine
+  write(ayearf, '(i4)') year
+  write(ayeari, '(i4)') year
+
+  call write_output
 enddo
 
 contains
@@ -188,7 +187,7 @@ freq='6hr'
 frequency=trim(adjustl(freq))
 
 ! Create output filename based on metadata
-outfile=trim(dir2)//trim(vaid)//trim(outdom)//trim(freq)//'_'//ayeari//amonth//'0100-'//ayearf//amonth//adayf//ahourf//'.nc'
+outfile=trim(dir2)//trim(vaid)//trim(outdom)//trim(freq)//'_'//trim(time_label(ttime(1),ttime(ntime)))//'.nc'
 fnameout=trim(adjustl(outfile))
 
 if (factor /= 0.) outvar_h_4d = outvar_h_4d * factor
