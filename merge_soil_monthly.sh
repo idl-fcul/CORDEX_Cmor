@@ -15,8 +15,10 @@ set -euo pipefail
 #
 usage() {
   cat >&2 <<EOF
-Usage: $0 -g <global ini> [-o <out dir>] [-v "tsl mrsol mrsfl"] [-y "2015 2016"] [-m] [-p] [-f] <dir>
+Usage: $0 -g <global ini> -r <reference file> [-o <out dir>] [-v "tsl mrsol mrsfl"] [-y "2015 2016"] [-m] [-p] [-f] <dir>
   -g  experiment global ini, e.g. experiments/cordex/cordex_global_EUR-12_d01.ini
+  -r  any file of the same grid written by the current code (e.g. the orog fx file):
+      its lon/lat, cell corners (vertices_lon/lat) and axis bounds are copied
   -o  output folder (default: <dir>)
   -v  variables to merge (default: "tsl mrsol mrsfl")
   -y  only these years (default: every year found)
@@ -28,11 +30,12 @@ EOF
   exit 1
 }
 
-GLOBAL_INI=""; OUT_DIR=""; VARS="tsl mrsol mrsfl"; YEARS=""
+GLOBAL_INI=""; REF_FILE=""; OUT_DIR=""; VARS="tsl mrsol mrsfl"; YEARS=""
 MERGE_ONLY=0; PARTIAL=0; FORCE=0
-while getopts "g:o:v:y:mpfh" opt; do
+while getopts "g:r:o:v:y:mpfh" opt; do
   case "$opt" in
     g) GLOBAL_INI="$OPTARG" ;;
+    r) REF_FILE="$OPTARG" ;;
     o) OUT_DIR="$OPTARG" ;;
     v) VARS="$OPTARG" ;;
     y) YEARS="$OPTARG" ;;
@@ -59,6 +62,7 @@ for t in ncrcat ncks ncatted ncap2 ncrename; do
 done
 if [ "$MERGE_ONLY" = 0 ]; then
   [ -f "$GLOBAL_INI" ] || { echo "Give the experiment's global ini with -g (or -m for merge only)." >&2; usage; }
+  [ -f "$REF_FILE" ] || { echo "Give a reference file of the same grid written by the current code with -r (e.g. the orog fx file), or -m for merge only." >&2; usage; }
 fi
 
 # value of  key = 'value'  in the global ini
@@ -105,7 +109,7 @@ time_val() {   # time_val <file> <index>
 #
 work() {   # work <var> <tmp file> <monthly files>...
   local var="$1" f="$2"; shift 2
-  local units ref now hist cm
+  local units ref now hist cm xa ya vu
   step ncrcat -O "$@" "$f" || return 1
 
   if [ "$MERGE_ONLY" = 0 ]; then
@@ -124,8 +128,17 @@ work() {   # work <var> <tmp file> <monthly files>...
       hours*) step ncap2 -O -h -s 'time=time/24.0;time_bnds=time_bnds/24.0' "$f" "$f" || return 1 ;;
     esac
 
-    # soil depth: double, at the middle of each layer
-    step ncap2 -O -h -s 'sdepth_bnds=rint(1.0e6*double(sdepth_bnds))/1.0e6;sdepth=rint(5.0e5*(sdepth_bnds(:,0)+sdepth_bnds(:,1)))/1.0e6' "$f" "$f" || return 1
+    # soil depth: dimension and coordinate "depth" (bounds depth_bnds), double,
+    # at the middle of each layer (old files: nsoil / sdepth / sdepth_bnds)
+    if has_var sdepth "$f"; then
+      step ncrename -O -h -d nsoil,depth -v sdepth,depth -v sdepth_bnds,depth_bnds "$f" >/dev/null || return 1
+    fi
+    step ncap2 -O -h -s 'depth_bnds=rint(1.0e6*double(depth_bnds))/1.0e6;depth=rint(5.0e5*(depth_bnds(:,0)+depth_bnds(:,1)))/1.0e6' "$f" "$f" || return 1
+
+    # horizontal grid from the reference file: lon/lat with their cell corners
+    # (vertices_lon/lat) and the bounds of the 1-D axes
+    if has_var rlon_bnds "$REF_FILE"; then xa=rlon; ya=rlat; else xa=x; ya=y; fi
+    step ncks -A -h -v "lon,lat,vertices_lon,vertices_lat,${xa}_bnds,${ya}_bnds" "$REF_FILE" "$f" || return 1
 
     now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     hist="${now};rewrote data to be consistent with $(ini_val activity_id) for variable ${var} found in table CORDEX-CMIP6_6hr."
@@ -133,9 +146,13 @@ work() {   # work <var> <tmp file> <monthly files>...
       -a "grid_mapping,${var},o,c,rotated_latitude_longitude" \
       -a earth_radius,rotated_latitude_longitude,o,f,6370000. \
       -a units,time,o,c,"days since ${ref}T00:00:00Z" \
-      -a calender,time,d,, -a calendar,time,o,c,"standard" \
+      -a calender,time,d,, -a calendar,time,o,c,"proleptic_gregorian" \
+      -a units_metadata,time,o,c,"leap_seconds: none" \
+      -a bounds,lon,o,c,"vertices_lon" -a bounds,lat,o,c,"vertices_lat" \
+      -a "bounds,${xa},o,c,${xa}_bnds" -a "bounds,${ya},o,c,${ya}_bnds" \
+      -a bounds,depth,o,c,"depth_bnds" -a long_name,depth,o,c,"depth" \
       -a long_name,time_bnds,d,, -a units,time_bnds,d,, -a calender,time_bnds,d,, -a calendar,time_bnds,d,, \
-      -a long_name,sdepth_bnds,d,, -a units,sdepth_bnds,d,, -a positive,sdepth_bnds,d,, -a axis,sdepth_bnds,d,, \
+      -a long_name,depth_bnds,d,, -a units,depth_bnds,d,, -a positive,depth_bnds,d,, -a axis,depth_bnds,d,, \
       -a driving_variant_label,global,o,c,"$(ini_val driving_variant)" \
       -a project_id,global,o,c,"$(ini_val project_id)" \
       -a source_type,global,o,c,"$(ini_val source_type)" \
@@ -147,6 +164,12 @@ work() {   # work <var> <tmp file> <monthly files>...
       -a external_variables,global,o,c,"areacella" \
       -a frequency,global,o,c,"6hr" \
       "$f" || return 1
+
+    # temperatures (units K): units_metadata as CF-1.11 recommends
+    vu=$(ncks -m -v "$var" "$f" | sed -n "s/.*${var}:units = \"\(.*\)\".*/\1/p" | sed -n '1p')
+    if [ "$vu" = "K" ]; then
+      step ncatted -O -h -a "units_metadata,${var},o,c,temperature: on_scale" "$f" || return 1
+    fi
 
     # instantaneous variables (cell_methods "time: point") have no time bounds
     cm=$(ncks -m -v "$var" "$f" | sed -n "s/.*${var}:cell_methods = \"\(.*\)\".*/\1/p" | sed -n '1p')

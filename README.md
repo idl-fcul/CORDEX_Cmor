@@ -259,6 +259,11 @@ modify these files — the scripts assemble a full namelist per run by
 concatenating the relevant `header_<var>` onto the experiment's grid ini file
 (see `run_out_generic.sh`'s processing loop).
 
+`header_sftlaf` and `header_sfturf` also set `area_type`
+(`'lake_and_inland_sea'`, `'urban'`): it becomes the scalar coordinate
+`type` that the CORDEX tables require for these two variables. Leave it
+out for every other variable.
+
 ## 4. Site Environment (`env.site.sh`)
 
 This is the one file that's genuinely different per user/machine. Together
@@ -652,6 +657,7 @@ that were already produced into yearly ones:
 ```bash
 module load nco
 bash merge_soil_monthly.sh -g experiments/cordex/cordex_global_EUR-12_d01.ini \
+     -r $SCRATCH/output_d01/orog_<...>_fx.nc \
      -o $SCRATCH/soil_yearly  $SCRATCH/output_d01
 ```
 
@@ -661,14 +667,19 @@ For each variable and year it needs all 12 monthly files
 default it also brings the metadata up to the current write routines
 (values from the global ini given with `-g`): global attributes,
 `tracking_id`, `history`, the `rotated_latitude_longitude` grid mapping,
-time in days with `calendar` (and no `time_bnds`, as these are
-instantaneous variables), soil depth at the layer middles, NetCDF-4
-classic with deflate level 1. The result is the same as running the new
-yearly program.
+time in days with `calendar = "proleptic_gregorian"` and `units_metadata`
+(and no `time_bnds`, as these are instantaneous variables), the soil
+coordinate `depth`/`depth_bnds` at the layer middles, NetCDF-4 classic
+with deflate level 1. The cell corners (`vertices_lon`/`vertices_lat`)
+and axis bounds can't be rebuilt from the monthly files, so they are
+copied, with `lon`/`lat`, from a reference file given with `-r`: any file
+of the same grid written by the current code, e.g. the orog fx file. The
+result is the same as running the new yearly program.
 
 | Option | Meaning |
 |---|---|
 | `-g <ini>` | experiment global ini (needed unless `-m`) |
+| `-r <file>` | reference file of the same grid from the current code (needed unless `-m`) |
 | `-o <dir>` | output folder (default: the input folder) |
 | `-v "tsl mrsol mrsfl"` | variables to merge |
 | `-y "2015 2016"` | only these years |
