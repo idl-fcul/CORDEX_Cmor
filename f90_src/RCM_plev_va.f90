@@ -7,8 +7,6 @@ implicit none
 real :: u_unstag, v_unstag
 integer :: ix, iy
 
-cp = (7.0/2.0) * Rd
-
 ! Read configuration using shared_subs subroutine
 call init_cordex_environment
 
