@@ -80,21 +80,42 @@ echo "$yearf"
 
 #
 #--- Archive, grid by grid (ECFS, then remote) ------------------
-# For each grid: copy every <var>_* file from its OUTPUT_DIR to ECFS,
-# then scp the <var>_*.nc files to REMOTE_HOST.
+# For each grid: copy this job's years of each variable to ECFS and scp them
+# to REMOTE_HOST; nothing is deleted, and any failure makes the job FAILED.
 #
+shopt -s nullglob
+failed=0
 for grid in "${GRIDS[@]}"; do
-  echo "Archiving grid ${grid}: ${OUTPUT_DIR[$grid]} -> ${ECFS_BASE[$grid]}, ${REMOTE_HOST}:${REMOTE_BASE[$grid]}"
+  echo "Archiving grid ${grid}, ${yeari}-${yearf}: ${OUTPUT_DIR[$grid]} -> ${ECFS_BASE[$grid]}, ${REMOTE_HOST}:${REMOTE_BASE[$grid]}"
   cd "${OUTPUT_DIR[$grid]}" || exit 1
 
   for (( v=0; v<${#var[@]}; v++)); do
-    emkdir -p "${ECFS_BASE[$grid]}/${var[$v]}"
-    ecp -o "${var[$v]}"_* "${ECFS_BASE[$grid]}/${var[$v]}/"
-  done
+    # This job's years only (<var>_..._<yyyymmdd...>), plus fixed fields (<var>_..._fx.nc)
+    files=()
+    for (( y=yeari; y<=yearf; y++ )); do
+      files+=( "${var[$v]}"_*_"${y}"[0-9][0-9][0-9][0-9]* )
+    done
+    files+=( "${var[$v]}"_*fx.nc )
+    if [ "${#files[@]}" -eq 0 ]; then
+      echo "ERROR: no ${var[$v]} files for ${yeari}-${yearf} in ${OUTPUT_DIR[$grid]}" >&2
+      failed=1
+      continue
+    fi
+    nc_files=()
+    for f in "${files[@]}"; do [[ "${f}" == *.nc ]] && nc_files+=( "${f}" ); done
 
-  for (( v=0; v<${#var[@]}; v++)); do
-    scp "${var[$v]}"_*.nc "${REMOTE_HOST}:${REMOTE_BASE[$grid]}/${var[$v]}/raw"
+    emkdir -p "${ECFS_BASE[$grid]}/${var[$v]}" \
+      && ecp -o "${files[@]}" "${ECFS_BASE[$grid]}/${var[$v]}/" \
+      || { echo "ERROR: ECFS copy of ${var[$v]} (${grid}) failed" >&2; failed=1; }
+    if [ "${#nc_files[@]}" -gt 0 ]; then
+      scp "${nc_files[@]}" "${REMOTE_HOST}:${REMOTE_BASE[$grid]}/${var[$v]}/raw" \
+        || { echo "ERROR: scp of ${var[$v]} (${grid}) failed" >&2; failed=1; }
+    fi
   done
 done
 
+if [ "${failed}" -ne 0 ]; then
+  echo "$0 (${VARSET}): some files were not archived — see the errors above. Nothing was deleted." >&2
+  exit 1
+fi
 echo "$0 (${VARSET}) done."

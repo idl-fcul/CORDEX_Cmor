@@ -617,7 +617,7 @@ integer, intent ( in) :: status
 
 if(status /= nf90_noerr) then
   print*, trim(nf90_strerror(status))
-  stop "Stopped"
+  stop 98
 end if
 end subroutine handle_err
 !
