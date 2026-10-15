@@ -9,11 +9,18 @@
 
 set -euo pipefail
 
+#
 #--- Repo location (from this file, symlinks resolved) ---------
+# ROOT_DIR = this file's folder (symlinks resolved), passed to every job.
+#
 SCRIPT_DIR="$(cd -- "$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")" &>/dev/null && pwd)"
 export ROOT_DIR="${SCRIPT_DIR}"
 
+#
 #--- Split sbatch options from the script name and its args ----
+# Arguments starting with - are sbatch options (write them as
+# --option=value); the first other one is the script name.
+#
 sbatch_args=()
 script_name=""
 
@@ -37,7 +44,10 @@ if [ -z "${script_name}" ]; then
   exit 1
 fi
 
+#
 #--- Target script ---------------------------------------------
+# The script must exist in scripts/.
+#
 target_path="${ROOT_DIR}/scripts/${script_name}"
 if [ ! -f "${target_path}" ]; then
   echo "No such script: ${target_path}" >&2
@@ -45,19 +55,30 @@ if [ ! -f "${target_path}" ]; then
   exit 1
 fi
 
+#
 #--- env.site.sh ------------------------------------------------
+# env.site.sh must exist (copy env.site.sh.example).
+#
 env_file="${ROOT_DIR}/env.site.sh"
 if [ ! -f "${env_file}" ]; then
   echo "No ${env_file} found — copy env.site.sh.example to env.site.sh and fill it in (README.md §4)." >&2
   exit 1
 fi
 
+#
 #--- Slurm settings: env.site.sh name / sbatch flag / default --
+# Which env.site.sh setting becomes which sbatch flag, and the value
+# used when a setting is missing from env.site.sh.
+#
 job_vars=(  JOB_QOS JOB_NODES JOB_NTASKS JOB_HINT        JOB_ACCOUNT JOB_MAIL_TYPE JOB_MAIL_USER JOB_CHDIR )
 job_flags=( --qos   --nodes   --ntasks   --hint          --account   --mail-type   --mail-user   --chdir   )
 job_defs=(  nf      1         1          nomultithread   ""          ALL           ""            ""        )
 
+#
 #--- Read JOB_* values and the experiment (in a subshell) -------
+# Sourced in a subshell so modules and compiler settings in env.site.sh
+# don't leak into the job; also reads the experiment.
+#
 job_settings="$(
   set +eu
   # shellcheck source=/dev/null
@@ -74,7 +95,10 @@ job_settings="$(
 )"
 mapfile -t job_values <<< "${job_settings}"
 
+#
 #--- Experiment check ------------------------------------------
+# The experiment folder must exist; it is passed to the job as CMOR_EXPERIMENT.
+#
 CMOR_EXPERIMENT="${job_values[${#job_vars[@]}]%|}"
 if [ -z "${CMOR_EXPERIMENT}" ]; then
   echo "No EXPERIMENT set in ${env_file} — add EXPERIMENT=\"<name>\" matching a folder experiments/<name>/." >&2
@@ -85,7 +109,10 @@ if [ ! -f "${ROOT_DIR}/experiments/${CMOR_EXPERIMENT}/${CMOR_EXPERIMENT}.sh" ]; 
   exit 1
 fi
 
+#
 #--- Build sbatch flags (caller's own flags take precedence) ----
+# One flag per non-empty JOB_* setting, skipping any flag given on the command line.
+#
 caller_has() {
   local a
   for a in ${sbatch_args[@]+"${sbatch_args[@]}"}; do
@@ -103,9 +130,11 @@ for i in "${!job_vars[@]}"; do
   fi
 done
 
+#
 #--- Per-varset flags for run_out_generic.sh / run_cp_generic.sh -
-# From config/varsets.sh: job name, --time, --mem (processing only) and
-# log files, unless given on the command line. Varset = 4th script arg.
+# For run_out_generic.sh / run_cp_generic.sh: job name, --time, --mem and
+# log files from config/varsets.sh for the varset (4th argument).
+#
 if [[ "${script_name}" == run_out_generic.sh || "${script_name}" == run_cp_generic.sh ]] && [ $# -ge 4 ]; then
   vs="$4"
   if [ "${script_name}" = run_out_generic.sh ]; then prefix="wrf"; else prefix="cp"; fi
@@ -147,7 +176,10 @@ fi
 
 echo "ROOT_DIR=${ROOT_DIR} (auto-detected from submit.sh's location), EXPERIMENT=${CMOR_EXPERIMENT}"
 
+#
 #--- Submit -----------------------------------------------------
+# Runs sbatch with these flags first and your own flags after, so yours win.
+#
 exec sbatch --export=ALL,ROOT_DIR="${ROOT_DIR}",CMOR_EXPERIMENT="${CMOR_EXPERIMENT}" \
      ${site_args[@]+"${site_args[@]}"} \
      ${sbatch_args[@]+"${sbatch_args[@]}"} \

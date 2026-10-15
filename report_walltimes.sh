@@ -8,7 +8,10 @@
 
 set -euo pipefail
 
+#
 #--- Options ----------------------------------------------------
+# --since, --margin and --clusters, with their defaults.
+#
 since="now-30days"
 margin=25
 clusters="all"
@@ -31,13 +34,20 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+#
 #--- Requirements -----------------------------------------------
+# sacct must be available, i.e. run on an HPC login node.
+#
 if ! command -v sacct >/dev/null 2>&1; then
   echo "ERROR: sacct not found — run this on an HPC login node with Slurm accounting enabled." >&2
   exit 1
 fi
 
+#
 #--- Configured limits (config/varsets.sh next to this file) -----
+# Loads config/varsets.sh (found through a symlink too) to compare
+# against TIME[]/CP_TIME[]; skipped if it isn't there.
+#
 SCRIPT_DIR="$(cd -- "$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")" &>/dev/null && pwd)"
 config="${SCRIPT_DIR}/config/varsets.sh"
 have_config=0
@@ -49,7 +59,10 @@ else
   echo "NOTE: ${config} not found — skipping the comparison with configured limits." >&2
 fi
 
+#
 #--- Helpers ----------------------------------------------------
+# Time conversions, and the limit configured for a wrf-*/cp-* job name.
+#
 # [DD-]HH:MM:SS -> seconds
 to_secs() {
   local t="$1" d=0 h m s
@@ -77,14 +90,21 @@ configured_limit() {
   esac
 }
 
+#
 #--- Collect runs from sacct (all clusters, top-level jobs) ------
+# Reads every wrf-*/cp-* job from sacct: longest completed run, run count,
+# clusters used and any non-completed states (TIMEOUT, OUT_OF_MEMORY, ...).
+#
 declare -A max_elapsed=()
 declare -A job_count=()
 declare -A other_states=()
 declare -A seen_clusters=()
 
 while IFS='|' read -r jobname state elapsed cluster; do
+  #
   # Only pipeline jobs (wrf-* / cp-*)
+  # Skips every job not submitted by this pipeline.
+  #
   [[ "${jobname}" == wrf-* || "${jobname}" == cp-* ]] || continue
 
   case ",${seen_clusters[$jobname]:-}," in
@@ -110,7 +130,11 @@ done < <(sacct -n -P -X -M "${clusters}" -S "${since}" \
               -o JobName,State,Elapsed,Cluster \
               --state=COMPLETED,TIMEOUT,FAILED,CANCELLED,OUT_OF_MEMORY)
 
+#
 #--- Report -----------------------------------------------------
+# One row per job name: longest run, suggested limit (+ margin), configured
+# limit, clusters, and notes such as LIMIT TOO SHORT.
+#
 echo "# Walltimes observed since ${since} on cluster(s): ${clusters} (margin: +${margin}%)"
 echo "# MaxElapsed is the longest COMPLETED run. A job that hit its time limit"
 echo "# (TIMEOUT) needed MORE than its limit — those are flagged, not measured."

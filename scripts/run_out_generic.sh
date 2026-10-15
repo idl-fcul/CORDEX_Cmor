@@ -7,11 +7,17 @@
 
 set -x
 
+#
 #--- Repo location (set by submit.sh) ---------------------------
+# ROOT_DIR comes from submit.sh; stops if this script was sent with plain sbatch.
+#
 : "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §0)}"
 REPO_DIR="${ROOT_DIR}"
 
+#
 #--- Arguments --------------------------------------------------
+# datebeg dateend year_lim varset; stops if the varset is missing.
+#
 date1=$1
 date2=$2
 date3=$3
@@ -26,7 +32,11 @@ if [ -z "${VARSET}" ]; then
   exit 1
 fi
 
+#
 #--- Environment: site, experiment, varsets ---------------------
+# Loads env.site.sh, the experiment (grids, input, output and archive
+# paths) and config/varsets.sh, then checks the varset exists.
+#
 source "${REPO_DIR}/env.site.sh"
 source "${REPO_DIR}/scripts/load_experiment.sh"
 source "${REPO_DIR}/config/varsets.sh"
@@ -37,17 +47,28 @@ if [ -z "${VARSETS[$VARSET]+x}" ]; then
   exit 1
 fi
 
+#
 #--- WRF file type (wrfxtrm for wxtrm, else wrfout) -------------
+# The wxtrm (and testex) varset reads wrfxtrm files; every other varset
+# reads wrfout.
+#
 wrffile="wrfout"
 if [ "${VARSET}" = "wxtrm" ] || [ "${VARSET}" = "testex" ]; then
   wrffile="wrfxtrm"
 fi
 
+#
 #--- Varset groups ("PROGRAM:var1,var2;PROGRAM:var3") -----------
+# Splits VARSETS[varset] into its groups (program pattern + variables).
+#
 exp="${EXPERIMENT}"
 IFS=';' read -r -a groups <<< "${VARSETS[$VARSET]}"
 
+#
 #--- Years and working directory --------------------------------
+# First and last year from datebeg/dateend; work happens in
+# ${ROOT_RUN_DIR}/<varset>.
+#
 date
 
 echo $datebeg
@@ -63,13 +84,20 @@ mkdir -p "${RUN_DIR}"
 
 cd "${RUN_DIR}" || exit 1
 
+#
 #--- Processing loop: year -> grid -> group -> variable ---------
+# For every year, grid, group and variable: build the namelist,
+# compile the program and run it.
+#
 for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
 
  START_YY=`echo ${j}`
  END_YY=`echo ${j}`
 
+ #
  # Grid (domain)
+ # Each grid of the experiment, with its own ini files and output folder.
+ #
  for grid in "${GRIDS[@]}"; do
 
   dom_id="${DOMAIN_ID[${grid}]}"
@@ -77,15 +105,25 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
 
   cp "${EXPERIMENT_DIR}/${exp}_global_${dom_id}_${grid}.ini" global_data.inp
 
+  #
   # Group
+  # Each group of the varset: one program pattern and its variables.
+  #
   for group in "${groups[@]}"; do
    prog_pattern="${group%%:*}"
    IFS=',' read -r -a var <<< "${group#*:}"
 
+   #
    # Variable
+   # Each variable (or level) is a separate run of the program.
+   #
    for (( v=0; v<${#var[@]}; v++)); do
 
+    #
     # Namelist: grid ini (placeholders filled in) + variable header
+    # inputlist.inp = the grid's ini file with year, WRF file type and
+    # paths filled in, plus header/header_<var>.
+    #
     sed \
      -e "s|_START_YY_|$START_YY|g" \
      -e "s|_END_YY_|$END_YY|g" \
@@ -103,10 +141,17 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
     echo "!" >> inputlist.inp
     echo "/" >> inputlist.inp
 
+    #
     # Program name (VAR -> variable name)
+    # The group's pattern with VAR replaced by the variable name.
+    #
     PROG_NAME="${prog_pattern/VAR/${var[$v]}}"
 
+    #
     # Compile and run
+    # Builds the shared module, the shared subroutines and the program,
+    # then runs it in the working directory.
+    #
     $FC $FFLAGS -c "${PROG_DIR}/${MOD_NAME}.f90"
     $FC $FFLAGS -c "${PROG_DIR}/${SUB_NAME}.f90" $NC_INC
     $FC $FFLAGS ${PROG_DIR}/${PROG_NAME}.f90 ${MOD_NAME}.o ${SUB_NAME}.o -o ${PROG_NAME}.exe $ALL_LIBS
@@ -121,7 +166,11 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
  done #domain (grid)
 done #year
 
+#
 #--- Archive job(s), if ARCHIVE="on": varset + CP_EXTRA companion
+# If ARCHIVE="on" in env.site.sh: archive this varset, and its CP_EXTRA
+# companion if it has one (submit.sh fills in the job flags).
+#
 if [ "${ARCHIVE:-on}" = "on" ]; then
   ${REPO_DIR}/submit.sh "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${VARSET}"
 
@@ -133,7 +182,11 @@ else
   echo "ARCHIVE=\"${ARCHIVE}\" in env.site.sh — no archive job submitted."
 fi
 
+#
 #--- Chain to the next varset (NEXT[], ADVANCE_YEAR[]) ----------
+# Submits NEXT[varset] while year_lim isn't passed: non-advancing links
+# keep the dates, the advancing link moves on to the next block of years.
+#
 next="${NEXT[$VARSET]}"
 if [ "${ADVANCE_YEAR[$VARSET]:-0}" = "1" ]; then
   chain_ok=0
@@ -146,7 +199,10 @@ fi
 if [ -n "${next}" ] && [ "$chain_ok" = "1" ]; then
   next_datebeg="${datebeg}"
   next_dateend="${dateend}"
+  #
   # Advancing link: next block of the same length, after this one, up to year_lim
+  # Next block: the year after this job's last year, same length, up to year_lim.
+  #
   if [ "${ADVANCE_YEAR[$VARSET]:-0}" = "1" ]; then
     next_datebeg=$(( yearf + 1 ))
     next_dateend=$(( yearf + 1 + yearf - yeari ))

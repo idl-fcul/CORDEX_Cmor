@@ -5,7 +5,11 @@
 # config/varsets_chain.sh. See config/README.md.
 #----------------------------------------------------------------
 
+#
 #--- VARSETS: name -> "PROGRAM:var1,var2;PROGRAM:var3" ------
+# Each varset: one or more groups of a program pattern and its variables.
+# VAR in a pattern is replaced by each variable (RCM_sfc_VAR -> RCM_sfc_tas).
+#
 declare -A VARSETS=(
   [out1]="RCM_sfc_VAR:tas,ts,th,hurs,huss,hfls,hfss,evspsbl,psl,zmla,od550aer,uas,vas"
   [out2]="RCM_sfc_VAR:ps,sfcWind,z0,tauu,tauv"
@@ -41,7 +45,11 @@ declare -A VARSETS=(
   [zlev_ua1]="RCM_zlev_ua:ua300m,ua250m,ua200m"
 )
 
+#
 #--- TIME: processing job --time (one model year) -------------
+# Walltime of the processing job, used by submit.sh as --time.
+# Values are for one model year; config/README.md gives the basis of each.
+#
 declare -A TIME=(
   [out1]="14:00:00"
   [out2]="10:00:00"
@@ -73,28 +81,44 @@ declare -A TIME=(
   [zlev_va1]="19:00:00"
 )
 
+#
 #--- CP_TIME: archive job --time (default DEFAULT_CP_TIME) ----
+# Walltime of the archive job (run_cp_generic.sh), used by submit.sh.
+# Varsets not listed use DEFAULT_CP_TIME.
+#
 DEFAULT_CP_TIME="20:00:00"
 declare -A CP_TIME=(
   [out1]="20:00:00"
   [out2]="20:00:00"
 )
 
+#
 #--- MEM: processing job --mem (default DEFAULT_MEM) ----------
+# Memory of the processing job, used by submit.sh as --mem.
+# Only varsets needing more than DEFAULT_MEM are listed.
+#
 DEFAULT_MEM="8G"
 declare -A MEM=(
   [zlev_uava0]="16G"
   [zlev_uava1]="16G"
 )
 
+#
 #--- CP_EXTRA: extra varset archived with this one ------------
+# Second varset archived after this one: the ua* files that the
+# uava programs write alongside the va* files they are named for.
+#
 declare -A CP_EXTRA=(
   [plev_uava]="plev_ua"
   [zlev_uava0]="zlev_ua0"
   [zlev_uava1]="zlev_ua1"
 )
 
+#
 #--- ADVANCE_YEAR: the link that advances the year ------------
+# 1 = this link moves on to the next year(s) when it resubmits.
+# Exactly one link per stream advances; the stream stops after year_lim.
+#
 declare -A ADVANCE_YEAR=(
   [wxtrm]=1        [zlev_uava0]=1  [zlev_uava1]=1
   [wpth1]=1        [wpth3]=1       [snw]=1
@@ -103,7 +127,11 @@ declare -A ADVANCE_YEAR=(
   [testex]=1       [teste]=1
 )
 
+#
 #--- NEXT: varset submitted when this one finishes ------------
+# Varset that run_out_generic.sh submits when this one finishes.
+# Together these form the streams; a varset pointing to itself loops on itself.
+#
 declare -A NEXT=(
   [plev_uava]="wxtrm"   [wxtrm]="plev_uava"
   [zlev_uava0]="zlev_uava0"
@@ -119,5 +147,9 @@ declare -A NEXT=(
   [teste]="teste"
 )
 
+#
 #--- ORDER: first link of each stream (run_analysis.sh) -------
+# Varsets run_analysis.sh submits, one per stream; the rest of each
+# stream follows through NEXT.
+#
 ORDER=(plev_uava zlev_uava0 zlev_uava1 cloud1 cloud2 plev_zg plev_ta rad plev_wa plev_hus)
