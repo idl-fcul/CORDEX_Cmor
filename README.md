@@ -187,7 +187,7 @@ experiments/
 ### The experiment file (`<name>.sh`)
 
 * **`ROOT_RUN_DIR`** — scratch working directory; each varset works in
-  `${ROOT_RUN_DIR}/<varset>`.
+  `${ROOT_RUN_DIR}/<varset>`. The experiment file creates it (`mkdir -p`).
 * **`run[]`** — the grids to process (`[d01]=1`, `[d02]=1`, ...; only the
   keys matter). Comment a line out to skip that grid.
 * Per grid, keyed the same way as `run[]`:
@@ -197,7 +197,8 @@ experiments/
   * **`OUTPUT_WRF[]`** — raw WRF output location.
   * **`OUTPUT_DIR[]`** — where that grid's CMORised output is written.
     **Each grid needs its own directory**: the archive step sends
-    everything in it to that grid's archive paths.
+    everything in it to that grid's archive paths. The experiment file
+    creates the output folder of every grid in `run[]` (`mkdir -p`).
   * **`ECFS_BASE[]`**, **`REMOTE_BASE[]`** — that grid's ECFS and remote
     archive paths.
 

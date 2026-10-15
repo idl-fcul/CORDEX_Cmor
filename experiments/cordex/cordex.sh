@@ -10,6 +10,7 @@
 # Each varset works (namelists, compiled programs) in ${ROOT_RUN_DIR}/<varset>.
 #
 ROOT_RUN_DIR=$SCRATCH/ssp370
+mkdir -p "${ROOT_RUN_DIR}"
 
 #
 #--- Grids to process (comment a line out to skip it) ------------
@@ -45,6 +46,10 @@ declare -A OUTPUT_WRF=(
 declare -A OUTPUT_DIR=(
   [d01]=${ROOT_RUN_DIR}/output
 )
+# create the output folder of every grid in run[]
+for g in "${!run[@]}"; do
+  mkdir -p "${OUTPUT_DIR[$g]}"
+done
 
 #
 #--- ECFS archive path per grid ---------------------------------

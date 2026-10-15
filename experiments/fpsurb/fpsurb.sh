@@ -10,6 +10,7 @@
 # Each varset works (namelists, compiled programs) in ${ROOT_RUN_DIR}/<varset>.
 #
 ROOT_RUN_DIR=$SCRATCH/fpsurb
+mkdir -p "${ROOT_RUN_DIR}"
 
 #
 #--- Grids to process (comment a line out to skip it) ------------
@@ -49,6 +50,10 @@ declare -A OUTPUT_DIR=(
   [d01]=${ROOT_RUN_DIR}/output
   [d02]=${ROOT_RUN_DIR}/output_d02
 )
+# create the output folder of every grid in run[]
+for g in "${!run[@]}"; do
+  mkdir -p "${OUTPUT_DIR[$g]}"
+done
 
 #
 #--- ECFS archive path per grid ---------------------------------
