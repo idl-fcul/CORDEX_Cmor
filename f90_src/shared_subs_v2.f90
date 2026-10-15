@@ -563,16 +563,25 @@ subroutine write_global_attributes
     use netcdf
     use datvar_s
 !
-!    integer :: status
+    character(len=20)  :: utc_now
+    character(len=49)  :: tracking
+    character(len=400) :: history_str
 
     ! Dynamically trigger namelist reading cleanly right before writing attributes
     call init_cordex_environment
+
+    ! Creation time (UTC, YYYY-MM-DDThh:mm:ssZ), tracking_id and history
+    call utc_timestamp(utc_now)
+    call new_tracking_id(tracking)
+    history_str = trim(utc_now)//';rewrote data to be consistent with correct frequency '// &
+                  trim(frequency)//' for variable '//trim(varname)//' found in table CORDEX-CMIP6_'// &
+                  trim(frequency)//'.'
 
     ! String Attributes
     status = nf90_put_att(ncid, nf90_global, "Conventions", trim(conventions))
     status = nf90_put_att(ncid, nf90_global, "activity_id", trim(activity_id))
     status = nf90_put_att(ncid, nf90_global, "contact", trim(contact))
-    status = nf90_put_att(ncid, nf90_global, "creation_date", trim(creationdate))
+    status = nf90_put_att(ncid, nf90_global, "creation_date", trim(utc_now))
     status = nf90_put_att(ncid, nf90_global, "CORDEX_domain", trim(CORDEX_domain))
     status = nf90_put_att(ncid, nf90_global, "domain", trim(domain_name))
     status = nf90_put_att(ncid, nf90_global, "domain_id", trim(domain_id))
@@ -581,10 +590,12 @@ subroutine write_global_attributes
     status = nf90_put_att(ncid, nf90_global, "driving_institution_id", trim(driving_inst_id))
     status = nf90_put_att(ncid, nf90_global, "driving_source_id", trim(driving_source_id))
     status = nf90_put_att(ncid, nf90_global, "driving_source", trim(driving_source))
-    status = nf90_put_att(ncid, nf90_global, "driving_variant_lable", trim(driving_variant))
+    status = nf90_put_att(ncid, nf90_global, "driving_variant_label", trim(driving_variant))
+    status = nf90_put_att(ncid, nf90_global, "external_variables", "areacella")
     status = nf90_put_att(ncid, nf90_global, "frequency", trim(frequency))
     status = nf90_put_att(ncid, nf90_global, "further_info_url", trim(further_info_url))
     status = nf90_put_att(ncid, nf90_global, "grid", trim(grid_desc))
+    status = nf90_put_att(ncid, nf90_global, "history", trim(history_str))
     status = nf90_put_att(ncid, nf90_global, "institution", trim(institution))
     status = nf90_put_att(ncid, nf90_global, "institution_id", trim(institution_id))
     status = nf90_put_att(ncid, nf90_global, "label", trim(label))
@@ -594,10 +605,12 @@ subroutine write_global_attributes
     status = nf90_put_att(ncid, nf90_global, "product", trim(product))
     status = nf90_put_att(ncid, nf90_global, "project_id", trim(project_id))
     status = nf90_put_att(ncid, nf90_global, "release_year", trim(release_year))
+    status = nf90_put_att(ncid, nf90_global, "source", trim(source_desc))
     status = nf90_put_att(ncid, nf90_global, "source_id", trim(source_id))
     status = nf90_put_att(ncid, nf90_global, "source_type", trim(source_type))
+    status = nf90_put_att(ncid, nf90_global, "tracking_id", trim(tracking))
     status = nf90_put_att(ncid, nf90_global, "variable_id", trim(varname))
-    status = nf90_put_att(ncid, nf90_global, "version_realisation", trim(version_real))
+    status = nf90_put_att(ncid, nf90_global, "version_realization", trim(version_real))
     status = nf90_put_att(ncid, nf90_global, "simulation_start_date", trim(sim_start_date))
 
     ! Numeric Attributes
@@ -608,6 +621,85 @@ subroutine write_global_attributes
     status = nf90_put_att(ncid, nf90_global, "dy", dy_val)
 
 end subroutine write_global_attributes
+!
+!-------------------------------------------------------------------------------------
+!
+! Current time in UTC as YYYY-MM-DDThh:mm:ssZ (date_and_time gives local
+! time plus its offset from UTC, which is removed here).
+!
+subroutine utc_timestamp(stamp)
+    character(len=20), intent(out) :: stamp
+    integer :: v(8), days, mins, y, m, d, era, yoe, doy, doe, mp
+
+    call date_and_time(values=v)
+    ! days since 1970-01-01 of the local date (civil-from-days algorithm)
+    y = v(1); m = v(2); d = v(3)
+    if (m <= 2) y = y - 1
+    era = merge(y, y - 399, y >= 0) / 400
+    yoe = y - era*400
+    mp  = mod(m + 9, 12)
+    doy = (153*mp + 2)/5 + d - 1
+    doe = yoe*365 + yoe/4 - yoe/100 + doy
+    days = era*146097 + doe - 719468
+    ! local minutes of the day minus the UTC offset (v(4), in minutes)
+    mins = v(5)*60 + v(6) - v(4)
+    days = days + floor(real(mins)/1440.)
+    mins = modulo(mins, 1440)
+    ! back from days since 1970-01-01 to year, month, day
+    days = days + 719468
+    era = merge(days, days - 146096, days >= 0) / 146097
+    doe = days - era*146097
+    yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365
+    y   = yoe + era*400
+    doy = doe - (365*yoe + yoe/4 - yoe/100)
+    mp  = (5*doy + 2)/153
+    d   = doy - (153*mp + 2)/5 + 1
+    m   = merge(mp + 3, mp - 9, mp < 10)
+    if (m <= 2) y = y + 1
+    write(stamp,'(i4.4,"-",i2.2,"-",i2.2,"T",i2.2,":",i2.2,":",i2.2,"Z")') &
+          y, m, d, mins/60, mod(mins,60), v(7)
+end subroutine utc_timestamp
+!
+!-------------------------------------------------------------------------------------
+!
+! tracking_id = "hdl:21.14103/" + a new random UUID (version 4) for every file.
+! Uses the Linux kernel's UUID generator; falls back to random_number.
+!
+subroutine new_tracking_id(tid)
+    character(len=49), intent(out) :: tid
+    character(len=36) :: uuid
+    character(len=16), parameter :: hexd = '0123456789abcdef'
+    logical, save :: seeded = .false.
+    integer :: u, ios, i, k
+    real :: r
+
+    uuid = ''
+    open(newunit=u, file='/proc/sys/kernel/random/uuid', status='old', action='read', iostat=ios)
+    if (ios == 0) then
+        read(u,'(a36)', iostat=ios) uuid
+        close(u)
+    end if
+    if (ios /= 0 .or. len_trim(uuid) /= 36) then
+        if (.not. seeded) then
+            call random_seed()
+            seeded = .true.
+        end if
+        do i = 1, 36
+            select case (i)
+            case (9, 14, 19, 24)
+                uuid(i:i) = '-'
+            case (15)
+                uuid(i:i) = '4'                        ! version 4
+            case default
+                call random_number(r)
+                k = int(r*16.)
+                if (i == 20) k = 8 + mod(k, 4)         ! variant 10xx
+                uuid(i:i) = hexd(k+1:k+1)
+            end select
+        end do
+    end if
+    tid = 'hdl:21.14103/'//uuid
+end subroutine new_tracking_id
 !
 !-------------------------------------------------------------------------------------
 !

@@ -58,7 +58,7 @@ amonthf = pad_int(month-1, 2)
 adayf = pad_int(day-1, 2)
 ahourf = pad_int(hour-1, 2)
 
-freq='1hr'
+freq='fx'
 frequency=trim(adjustl(freq))
 
 ! Create output filename based on metadata

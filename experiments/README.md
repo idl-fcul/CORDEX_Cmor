@@ -48,3 +48,14 @@ The `&global_metadata` namelist: global (file-level) CF/CMOR attributes written 
   experiment, ...) should be checked against this CV before a real run —
   using a value that isn't in it will produce output that isn't
   CORDEX-CMIP6 compliant even if it runs successfully.
+
+**Written automatically, not set in the ini** (by `write_global_attributes` in `f90_src/shared_subs_v2.f90`):
+
+- `creation_date` — the time the file is written, in UTC (`YYYY-MM-DDThh:mm:ssZ`).
+- `tracking_id` — `hdl:21.14103/<UUID>`, a new random UUID (version 4) for every file, so there is no need to add it afterwards with cdo.
+- `history` — `<creation time>;rewrote data to be consistent with correct frequency <frequency> for variable <variable> found in table CORDEX-CMIP6_<frequency>.`
+- `frequency` — set by each program: `1hr` (or `6hr`) for most, `day` for the daily extremes, `fx` for the fixed fields.
+- `source` — the ini's `source_desc`, which must match a `source` entry for your `source_id` in the CV.
+- `external_variables` — `areacella` (the cell area referred to by `cell_measures`).
+
+Check your values against the CV; for example, `driving_variant` must be the full `r<n>i<n>p<n>f<n>` form (`r1i1p1f1`).
