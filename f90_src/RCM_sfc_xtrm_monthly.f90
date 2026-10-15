@@ -141,7 +141,7 @@ use netcdf
 amonthf = pad_int(month-1, 2)
 adayf = pad_int(day-1, 2)
 
-freq='1day'
+freq='day'
 frequency=trim(adjustl(freq))
 tunts='days since '//ayearini//'-01-01 00:00'
 timeunits=trim(adjustl(tunts))
