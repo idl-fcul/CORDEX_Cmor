@@ -275,9 +275,13 @@ cp env.site.sh.example env.site.sh
 * **Experiment** — `EXPERIMENT`, the name of the experiment folder to use
   (`experiments/<name>/`, §2). Everything that differs per experiment or
   per domain lives there, not here.
-* **Archive step settings** — `CP_MODULES`, `REMOTE_HOST` (see
-  [§7, Archiving](#7-archiving)). The archive *paths* are per grid, in the
-  experiment file.
+* **Archive step settings** — `ARCHIVE`, `CP_MODULES`, `REMOTE_HOST`
+  (see [§7, Archiving](#7-archiving)). The archive *paths* are per grid,
+  in the experiment file. **`ARCHIVE` is `"off"` in the template**: the
+  archive step (copying to ECMWF's ECFS and `scp` to a remote server) is
+  specific to the IDL-FCUL setup, so turn it on only if you use the same
+  arrangement. An older `env.site.sh` without an `ARCHIVE` line keeps
+  archiving on.
 
 * **Slurm job settings** — `JOB_QOS`, `JOB_NODES`, `JOB_NTASKS`,
   `JOB_HINT`, `JOB_ACCOUNT`, `JOB_MAIL_TYPE`, `JOB_MAIL_USER`,
@@ -429,8 +433,8 @@ The 3 scripts are fully generic — you should not need to edit them.
    varset: builds the namelist (the grid's ini file with its placeholders
    filled in, plus `header/header_<var>`), compiles the program and runs it
    in `${ROOT_RUN_DIR}/<varset>`.
-3. Submits the archive job (§7), and a second one for its `CP_EXTRA[]`
-   companion.
+3. If `ARCHIVE="on"`, submits the archive job (§7), and a second one for
+   its `CP_EXTRA[]` companion.
 4. Submits the next varset of its stream (§8).
 
 **Arguments:** `run_out_generic.sh` and `run_cp_generic.sh` take
@@ -440,9 +444,16 @@ apart.
 
 ## 7. Archiving
 
-After processing each varset, `run_out_generic.sh` unconditionally submits
-`run_cp_generic.sh` for the same varset — matching the original scripts'
-unconditional call to their `run_cp_<varset>.sh` sibling. It reads the same
+**Archiving is optional.** It copies the CMORised files to ECMWF's tape
+archive (ECFS, with `emkdir`/`ecp`) and to a remote server (`scp`) — the
+setup used at IDL-FCUL, which other sites may not have. Turn it on or off
+with `ARCHIVE` in `env.site.sh` (§4): `"on"` or `"off"` (the template's
+default is `"off"`; an `env.site.sh` without the line keeps it on). With it
+off, the output simply stays in each grid's `OUTPUT_DIR`, and chaining
+(§8) is unaffected.
+
+With `ARCHIVE="on"`, after processing each varset `run_out_generic.sh`
+submits `run_cp_generic.sh` for the same varset. It reads the same
 `VARSETS[<varset>]` entry, flattens every group into one plain variable
 list, and archives each `<var>_*.nc` to ECFS and a remote server. There's
 nothing varset-specific to write — adding a new varset to

@@ -147,8 +147,9 @@ ECMWF) are listed. A program keeps the whole year of its output in memory:
 1. `run_out_generic.sh <datebeg> <dateend> <year_lim> <varset>` looks up
    `VARSETS[<varset>]`, loops over every group/variable, compiles+runs the
    matching Fortran program for each year in `[datebeg, dateend]`.
-2. It then **unconditionally** submits `run_cp_generic.sh` for the same
-   varset (archiving) — and a second time for `CP_EXTRA[<varset>]` if set.
+2. If `ARCHIVE="on"` in `env.site.sh`, it then submits `run_cp_generic.sh`
+   for the same varset (archiving) — and a second time for
+   `CP_EXTRA[<varset>]` if set.
 3. It then checks `NEXT[<varset>]`. If set, and if `yeari <= year_lim`
    (`yeari` is the year of `datebeg`), it submits that next varset for
    the same dates. If `ADVANCE_YEAR[<varset>]=1`, it instead checks
@@ -181,8 +182,8 @@ Whatever you change, make the same change in `varsets_chain.sh` (or
 - **Each varset on its own, year by year:** use
   `config/varsets_single.sh`, where every varset loops on itself (main
   README §0 has the steps for switching to it).
-- Archiving is unaffected either way — it's unconditional (step 2), not
-  part of the chain.
+- Archiving is unaffected either way — it's step 2 (controlled only by
+  `ARCHIVE` in `env.site.sh`), not part of the chain.
 - `ADVANCE_YEAR[]` only matters to varsets that still have a `NEXT[]`
   entry, so there's nothing extra to clean up there.
 

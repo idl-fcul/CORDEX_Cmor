@@ -121,12 +121,16 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
  done #domain (grid)
 done #year
 
-#--- Archive job(s): this varset, plus its CP_EXTRA companion ---
- ${REPO_DIR}/submit.sh "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${VARSET}"
+#--- Archive job(s), if ARCHIVE="on": varset + CP_EXTRA companion
+if [ "${ARCHIVE:-on}" = "on" ]; then
+  ${REPO_DIR}/submit.sh "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${VARSET}"
 
-extra="${CP_EXTRA[$VARSET]:-}"
-if [ -n "${extra}" ]; then
-  ${REPO_DIR}/submit.sh "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${extra}"
+  extra="${CP_EXTRA[$VARSET]:-}"
+  if [ -n "${extra}" ]; then
+    ${REPO_DIR}/submit.sh "run_cp_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${extra}"
+  fi
+else
+  echo "ARCHIVE=\"${ARCHIVE}\" in env.site.sh — no archive job submitted."
 fi
 
 #--- Chain to the next varset (NEXT[], ADVANCE_YEAR[]) ----------
