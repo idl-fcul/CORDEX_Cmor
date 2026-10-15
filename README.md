@@ -208,8 +208,8 @@ its two ini files, or two grids sharing an `OUTPUT_DIR`, stops the job at
 the start with a message saying what's wrong.
 
 Enabling a second grid makes **every** job do both, so raise `TIME[]` in
-`config/varsets.sh` accordingly, and remember both grids' output sits on
-disk until its archive job has run.
+`config/varsets.sh` accordingly, and remember both grids' output stays on
+disk — the archive step (§7) copies it but doesn't delete it.
 
 ### The ini files (one pair per grid)
 
@@ -270,8 +270,14 @@ cp env.site.sh.example env.site.sh
 
 * **Paths** — `PROG_DIR`, `HEADER_DIR` (both derived from `ROOT_DIR`, so
   you don't repeat yourself).
-* **Compiler/library versions** — `intel_v`, `hdf5_v`, `netcdf_v`, `FC`,
-  `FFLAGS`, and the NetCDF/HDF5 include/lib paths.
+* **Modules** — `MODULES`, built from the versions `intel_v`, `hdf5_v`,
+  `netcdf_v`, `hpx_v`. Every job loads it from here (`run_analysis.sh`,
+  `run_out_generic.sh`, `run_cp_generic.sh`), so a module change is made
+  once. Check the template's list against the modules your site provides
+  (`module avail`). The commented `source ~/.bash_compile_wrf` line is the
+  IDL-FCUL alternative — a personal file other users don't have.
+* **Compiler/library versions** — `FC`, `FFLAGS`, and the NetCDF/HDF5
+  include/lib paths (built from the same version variables).
 * **Experiment** — `EXPERIMENT`, the name of the experiment folder to use
   (`experiments/<name>/`, §2). Everything that differs per experiment or
   per domain lives there, not here.
@@ -432,7 +438,11 @@ The 3 scripts are fully generic — you should not need to edit them.
 2. For each year, then each grid, then each group and variable of the
    varset: builds the namelist (the grid's ini file with its placeholders
    filled in, plus `header/header_<var>`), compiles the program and runs it
-   in `${ROOT_RUN_DIR}/<varset>`.
+   in `${ROOT_RUN_DIR}/<varset>`. **If a compile or a program run fails,
+   the job stops there** with an error naming the program, variable, grid
+   and year: no archive job and no next job are submitted, and the job
+   shows as FAILED, so a broken stream stops instead of carrying on with
+   missing output.
 3. If `ARCHIVE="on"`, submits the archive job (§7), and a second one for
    its `CP_EXTRA[]` companion.
 4. Submits the next varset of its stream (§8).
@@ -455,9 +465,20 @@ off, the output simply stays in each grid's `OUTPUT_DIR`, and chaining
 With `ARCHIVE="on"`, after processing each varset `run_out_generic.sh`
 submits `run_cp_generic.sh` for the same varset. It reads the same
 `VARSETS[<varset>]` entry, flattens every group into one plain variable
-list, and archives each `<var>_*.nc` to ECFS and a remote server. There's
-nothing varset-specific to write — adding a new varset to
-`config/varsets.sh` automatically gets archiving for free.
+list, and archives **that job's years** of each variable (files
+`<var>_..._<yyyy>...`, from `datebeg`/`dateend`; plus time-independent
+`<var>_..._fx.nc` files) to ECFS and a remote server — earlier years
+aren't sent again. There's nothing varset-specific to write — adding a
+new varset to `config/varsets.sh` automatically gets archiving for free.
+
+**Archived files are never deleted** — they stay in `OUTPUT_DIR`, since a
+copy can fail or be incomplete. If a variable has no files for those
+years, or an `ecp`/`scp` fails, the job reports it, carries on with the
+other variables, and ends as FAILED so you can see it and resubmit:
+
+```bash
+./submit.sh run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
+```
 
 `plev_uava`, `zlev_uava0` and `zlev_uava1` list only their `va*`
 variables, but their programs also write the matching `ua*` files, so

@@ -65,6 +65,16 @@ exp="${EXPERIMENT}"
 IFS=';' read -r -a groups <<< "${VARSETS[$VARSET]}"
 
 #
+#--- Failure handling -------------------------------------------
+# A failed compile or program run stops the job with an error, so no
+# archive job and no next job are submitted (the job shows as FAILED).
+#
+fail() {
+  echo "ERROR: $* — stopping ${VARSET}: no archive job, no next job." >&2
+  exit 1
+}
+
+#
 #--- Years and working directory --------------------------------
 # First and last year from datebeg/dateend; work happens in
 # ${ROOT_RUN_DIR}/<varset>.
@@ -149,14 +159,17 @@ for(( j = ${yeari}; j <= ${yearf}; j++ )) ; do
 
     #
     # Compile and run
-    # Builds the shared module, the shared subroutines and the program,
-    # then runs it in the working directory.
+    # Builds the shared module, the shared subroutines and the program, then
+    # runs it; any failure stops the job (see "Failure handling").
     #
-    $FC $FFLAGS -c "${PROG_DIR}/${MOD_NAME}.f90"
-    $FC $FFLAGS -c "${PROG_DIR}/${SUB_NAME}.f90" $NC_INC
-    $FC $FFLAGS ${PROG_DIR}/${PROG_NAME}.f90 ${MOD_NAME}.o ${SUB_NAME}.o -o ${PROG_NAME}.exe $ALL_LIBS
+    $FC $FFLAGS -c "${PROG_DIR}/${MOD_NAME}.f90" || fail "compiling ${MOD_NAME}.f90 failed"
+    $FC $FFLAGS -c "${PROG_DIR}/${SUB_NAME}.f90" $NC_INC || fail "compiling ${SUB_NAME}.f90 failed"
+    $FC $FFLAGS ${PROG_DIR}/${PROG_NAME}.f90 ${MOD_NAME}.o ${SUB_NAME}.o -o ${PROG_NAME}.exe $ALL_LIBS \
+      || fail "compiling ${PROG_NAME}.f90 failed"
 
     ./${PROG_NAME}.exe
+    rc=$?
+    [ "$rc" -eq 0 ] || fail "${PROG_NAME}.exe failed (exit code ${rc}) for ${var[$v]}, ${grid}, ${j}"
 
     rm inputlist.inp
     rm header_${grid}

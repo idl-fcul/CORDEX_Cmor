@@ -15,15 +15,11 @@ set -x
 REPO_DIR="${ROOT_DIR}"
 
 #
-#--- Modules ----------------------------------------------------
-# Modules for this short orchestration job.
+#--- Environment (modules from env.site.sh) ---------------------
+# Loads env.site.sh, so this job uses the same modules as every other
+# job — change them once, in env.site.sh.
 #
-intel_v="2021.4"
-hdf5_v="1.12.2"
-ncdf_v="4.9.3"
-jasper_v="2.0.14"
-nco_v="4.9.7"
-module load prgenv/intel intel/${intel_v} hpcx-openmpi netcdf4/${ncdf_v} hdf5/${hdf5_v} jasper/${jasper_v} cdo nco/${nco_v} python3
+source "${REPO_DIR}/env.site.sh"
 
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${NETCDF4_DIR}/lib"
 

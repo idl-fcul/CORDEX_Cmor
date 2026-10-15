@@ -28,4 +28,11 @@ jobs:
             config/varsets.sh \
             config/varsets_chain.sh \
             config/varsets_single.sh \
-            env.site.sh.example
+            env.site.sh.example \
+            submit.sh \
+            report_walltimes.sh \
+            lint_varsets.sh
+
+      - name: Check config/varsets.sh (lint_varsets.sh)
+        # Fails if a varset, NEXT/CP_EXTRA entry, program or header is missing.
+        run: bash lint_varsets.sh
