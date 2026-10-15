@@ -153,7 +153,7 @@ config/        <- varsets.sh: the active variables/programs/scheduling, the only
 scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they source; §6)
 .github/       <- ShellCheck run on GitHub
 submit.sh      <- submits every job (§6, §9)
-report_walltimes.sh, lint_varsets.sh  <- helper scripts (§11)
+report_walltimes.sh, lint_varsets.sh, merge_soil_monthly.sh  <- helper scripts (§11)
 env.site.sh.example  <- copy to env.site.sh and fill in (§4)
 LICENSE, README.md
 ```
@@ -639,6 +639,43 @@ It reports an **error** if:
 
 and a **warning** for every varset without its own `CP_TIME[]` (it uses
 `DEFAULT_CP_TIME`).
+
+### `merge_soil_monthly.sh` — monthly soil files to one file per year
+
+The soil programs (`RCM_sfc_tsl`, `RCM_sfc_mrsol`, `RCM_sfc_mrsfl`) now write
+one 6hr file per year, as CORDEX-CMIP6 wants. The old monthly versions are
+kept as `RCM_sfc_<var>_monthly.f90` (use `RCM_sfc_VAR_monthly` as the
+program pattern in a varset to run them). This script joins monthly files
+that were already produced into yearly ones:
+
+```bash
+module load nco
+bash merge_soil_monthly.sh -g experiments/cordex/cordex_global_EUR-12_d01.ini \
+     -o $SCRATCH/soil_yearly  $SCRATCH/output_d01
+```
+
+For each variable and year it needs all 12 monthly files
+(`<var>_..._6hr_YYYYMM0100-YYYYMMDDhh.nc`), joins them in time order with
+`ncrcat`, and writes `<var>_..._6hr_YYYY01010000-YYYY12311800.nc`. By
+default it also brings the metadata up to the current write routines
+(values from the global ini given with `-g`): global attributes,
+`tracking_id`, `history`, the `rotated_latitude_longitude` grid mapping,
+time in days with `calendar`, soil depth at the layer middles, NetCDF-4
+classic with deflate level 1. The result is the same as running the new
+yearly program.
+
+| Option | Meaning |
+|---|---|
+| `-g <ini>` | experiment global ini (needed unless `-m`) |
+| `-o <dir>` | output folder (default: the input folder) |
+| `-v "tsl mrsol mrsfl"` | variables to merge |
+| `-y "2015 2016"` | only these years |
+| `-m` | merge only, metadata kept as in the monthly files |
+| `-p` | merge a year with fewer than 12 months |
+| `-f` | overwrite an existing yearly file |
+
+The monthly files are never changed or deleted; check the yearly files
+and remove the monthly ones yourself.
 
 ## Notes / things to double check before first real run
 

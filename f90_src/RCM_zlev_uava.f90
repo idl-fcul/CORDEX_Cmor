@@ -283,8 +283,8 @@ subroutine write_dual_output
   h_str = trim(h_istr)//'m'
 
   ! Build unique system output targets natively using context pressure levels
-  fnameout_u = trim(dir2)//'ua'//trim(h_str)//trim(outdom)//trim(freq)//'_'//ayeari//amonthi//adayi//ahouri//'-'//ayearf//amonthf//adayf//ahourf//'.nc'
-  fnameout_v = trim(dir2)//'va'//trim(h_str)//trim(outdom)//trim(freq)//'_'//ayeari//amonthi//adayi//ahouri//'-'//ayearf//amonthf//adayf//ahourf//'.nc'
+  fnameout_u = trim(dir2)//'ua'//trim(h_str)//trim(outdom)//trim(freq)//'_'//trim(time_label(ttime(1),ttime(ntime)))//'.nc'
+  fnameout_v = trim(dir2)//'va'//trim(h_str)//trim(outdom)//trim(freq)//'_'//trim(time_label(ttime(1),ttime(ntime)))//'.nc'
   write(*,*) fnameout_u,fnameout_v
   if (factor /= 0.0) then
     outvar_h_u = outvar_h_u * factor

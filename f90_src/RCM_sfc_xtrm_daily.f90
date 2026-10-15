@@ -157,7 +157,7 @@ tunts='days since '//ayearini//'-01-01 00:00'
 timeunits=trim(adjustl(tunts))
 
 ! Create output filename based on metadata
-outfile=trim(dir2)//trim(vaid)//trim(outdom)//'day_'//ayeari//amonthi//adayi//'00-'//ayearf//amonthf//adayf//'00.nc'
+outfile=trim(dir2)//trim(vaid)//trim(outdom)//trim(freq)//'_'//trim(time_label(ttime(1),ttime(ntime)))//'.nc'
 fnameout=trim(adjustl(outfile))
 
 if (factor /= 0.) outvar_h = outvar_h * factor

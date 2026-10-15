@@ -197,7 +197,7 @@ status = nf90_def_var_chunking(ncid, uVarId, nf90_chunked, (/ nlon, nlat, 1 /))
 call handle_err(status)
 
 ! Compression call
-status = nf90_def_var_deflate(ncid, uVarId, shuffle = 1, deflate = 1, deflate_level = 2)
+status = nf90_def_var_deflate(ncid, uVarId, shuffle = 1, deflate = 1, deflate_level = 1)
 call handle_err(status)                 
 
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
@@ -315,7 +315,7 @@ status = nf90_def_var_chunking(ncid, uVarId, nf90_chunked, (/ nlon, nlat, 1 /))
 call handle_err(status)
 
 ! Compression call
-status = nf90_def_var_deflate(ncid, uVarId, shuffle = 1, deflate = 1, deflate_level = 2)
+status = nf90_def_var_deflate(ncid, uVarId, shuffle = 1, deflate = 1, deflate_level = 1)
 call handle_err(status)
 
 status = nf90_put_att(ncid, TVarID, "standard_name","time")
@@ -475,7 +475,7 @@ status = nf90_def_var_chunking(ncid, uVarId, nf90_chunked, (/ nlon, nlat, nsoil,
 call handle_err(status)
 
 ! Compression call
-status = nf90_def_var_deflate(ncid, uVarId, shuffle = 1, deflate = 1, deflate_level = 2)
+status = nf90_def_var_deflate(ncid, uVarId, shuffle = 1, deflate = 1, deflate_level = 1)
 call handle_err(status)
 
 status = nf90_put_att(ncid, TVarID, "standard_name","time")
@@ -550,9 +550,10 @@ status = nf90_put_var(ncid, rlonVarId, rlon )
 call handle_err(status)
 status = nf90_put_var(ncid, rlatVarId, rlat )
 call handle_err(status)
-status = nf90_put_var(ncid, SVarID, sdepth )
+! depth coordinate = middle of each soil layer (sdepth holds the layer thicknesses)
+status = nf90_put_var(ncid, SVarID, anint(5.d5*(dble(sdepth_bounds(1,:))+dble(sdepth_bounds(2,:))))/1.d6 )
 call handle_err(status)
-status = nf90_put_var(ncid, SBVarID, sdepth_bounds )
+status = nf90_put_var(ncid, SBVarID, anint(1.d6*dble(sdepth_bounds))/1.d6 )
 call handle_err(status)
 status = nf90_put_var(ncid, uVarId, uvar )
 call handle_err(status)
@@ -630,29 +631,58 @@ end subroutine write_global_attributes
 !
 !-------------------------------------------------------------------------------------
 !
-! Current time in UTC as YYYY-MM-DDThh:mm:ssZ (date_and_time gives local
-! time plus its offset from UTC, which is removed here).
+! File-name time range "<first>-<last>" from the first and last time values
+! (in timeunits since <iniyear>-01-01): YYYYMMDDhhmm for sub-daily files,
+! YYYYMMDD for daily and YYYYMM for monthly ones (CORDEX-CMIP6 file names).
 !
-subroutine utc_timestamp(stamp)
-    character(len=20), intent(out) :: stamp
-    integer :: v(8), days, mins, y, m, d, era, yoe, doy, doe, mp
+function time_label(t1, t2) result(label)
+    real, intent(in) :: t1, t2
+    character(len=25) :: label
+    label = trim(time_stamp(t1))//'-'//trim(time_stamp(t2))
+end function time_label
 
-    call date_and_time(values=v)
-    ! days since 1970-01-01 of the local date (civil-from-days algorithm)
-    y = v(1); m = v(2); d = v(3)
+function time_stamp(t) result(stamp)
+    real, intent(in) :: t
+    character(len=12) :: stamp
+    integer(kind=8) :: mins
+    integer :: iy, days, y, m, d
+    real(kind=8) :: tfac
+
+    tfac = 1.d0
+    if (timeunits(1:5) == 'hours') tfac = 24.d0
+    read(ayearini,*) iy
+    mins = nint(dble(t)/tfac*1440.d0, kind=8)
+    days = days_from_civil(iy, 1, 1) + int(floor(dble(mins)/1440.d0))
+    mins = modulo(mins, 1440_8)
+    call civil_from_days(days, y, m, d)
+    select case (trim(frequency))
+    case ('day')
+        write(stamp,'(i4.4,2i2.2)') y, m, d
+    case ('mon')
+        write(stamp,'(i4.4,i2.2)') y, m
+    case default
+        write(stamp,'(i4.4,4i2.2)') y, m, d, int(mins/60), int(mod(mins,60_8))
+    end select
+end function time_stamp
+
+! Days since 1970-01-01 of a (proleptic Gregorian) date, and back.
+pure function days_from_civil(yy, m, d) result(days)
+    integer, intent(in) :: yy, m, d
+    integer :: days, y, era, yoe, doy, doe
+    y = yy
     if (m <= 2) y = y - 1
     era = merge(y, y - 399, y >= 0) / 400
     yoe = y - era*400
-    mp  = mod(m + 9, 12)
-    doy = (153*mp + 2)/5 + d - 1
+    doy = (153*mod(m + 9, 12) + 2)/5 + d - 1
     doe = yoe*365 + yoe/4 - yoe/100 + doy
     days = era*146097 + doe - 719468
-    ! local minutes of the day minus the UTC offset (v(4), in minutes)
-    mins = v(5)*60 + v(6) - v(4)
-    days = days + floor(real(mins)/1440.)
-    mins = modulo(mins, 1440)
-    ! back from days since 1970-01-01 to year, month, day
-    days = days + 719468
+end function days_from_civil
+
+pure subroutine civil_from_days(days_in, y, m, d)
+    integer, intent(in)  :: days_in
+    integer, intent(out) :: y, m, d
+    integer :: days, era, doe, yoe, doy, mp
+    days = days_in + 719468
     era = merge(days, days - 146096, days >= 0) / 146097
     doe = days - era*146097
     yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365
@@ -662,6 +692,21 @@ subroutine utc_timestamp(stamp)
     d   = doy - (153*mp + 2)/5 + 1
     m   = merge(mp + 3, mp - 9, mp < 10)
     if (m <= 2) y = y + 1
+end subroutine civil_from_days
+!
+! Current time in UTC as YYYY-MM-DDThh:mm:ssZ (date_and_time gives local
+! time plus its offset from UTC, which is removed here).
+!
+subroutine utc_timestamp(stamp)
+    character(len=20), intent(out) :: stamp
+    integer :: v(8), days, mins, y, m, d
+
+    call date_and_time(values=v)
+    ! local date and minutes of the day, minus the UTC offset v(4) (minutes)
+    mins = v(5)*60 + v(6) - v(4)
+    days = days_from_civil(v(1), v(2), v(3)) + floor(real(mins)/1440.)
+    mins = modulo(mins, 1440)
+    call civil_from_days(days, y, m, d)
     write(stamp,'(i4.4,"-",i2.2,"-",i2.2,"T",i2.2,":",i2.2,":",i2.2,"Z")') &
           y, m, d, mins/60, mod(mins,60), v(7)
 end subroutine utc_timestamp

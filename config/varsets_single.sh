@@ -100,6 +100,7 @@ DEFAULT_MEM="8G"
 declare -A MEM=(
   [zlev_uava0]="16G"
   [zlev_uava1]="16G"
+  [soil]="16G"
 )
 
 #
