@@ -4,5 +4,6 @@ vunts = '%'
 lname = 'Percentage of the Grid Cell Occupied by Lake'
 stname = 'area_fraction'
 cmethods = 'area: mean'
+area_type = 'lake_and_inland_sea'
 factor = 100.           ! costant to multipy variable with ( used only if /= 0)
 !

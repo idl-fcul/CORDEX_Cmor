@@ -1,6 +1,8 @@
 module shared_subs
     use datvar_s
     implicit none
+    ! ids of the horizontal bounds variables (set in def_horizontal_vars)
+    integer, private :: vlonID, vlatID, xbndID, ybndID
 
 contains
 
@@ -31,6 +33,7 @@ subroutine read_cordex_config(cfg_filename)
     height(1) = missing_value
     pres      = missing_value
     projection = ''
+    area_type  = ''
     pole_lat = missing_value;  pole_lon = missing_value
     truelat1 = missing_value;  truelat2 = missing_value
     stand_lon = missing_value; cen_lat = missing_value
@@ -181,11 +184,63 @@ call ncerror(status,'getting var id')
 
 status=nf90_get_var(ncid,varid,landmask,(/xoffset,yoffset/),(/nlon,nlat/),(/1,1/))
 call ncerror(status,'reading '//'LANDMASK')
+!
+! Cell corners for vertices_lon/vertices_lat: WRF's corner points XLONG_C/XLAT_C
+! (one more than the mass points in each direction); if the geo_em file has
+! none, each corner is the mean of the 4 mass points around it.
+call read_corners(ncid)
 
 status = nf90_close(ncid)
 call ncerror(status,'closing file')
 
 end subroutine read_geog
+!
+!-----------------------------------------------------------------------
+!
+subroutine read_corners(ncid)
+use netcdf
+integer, intent(in) :: ncid
+real, allocatable :: clon(:,:), clat(:,:), mlon(:,:), mlat(:,:)
+integer :: i, j, idlon, idlat
+
+allocate(clon(nlon+1,nlat+1), clat(nlon+1,nlat+1))
+if (nf90_inq_varid(ncid, 'XLONG_C', idlon) == nf90_noerr .and. &
+    nf90_inq_varid(ncid, 'XLAT_C',  idlat) == nf90_noerr) then
+    status = nf90_get_var(ncid, idlon, clon, (/xoffset, yoffset/), (/nlon+1, nlat+1/))
+    call ncerror(status, 'reading XLONG_C')
+    status = nf90_get_var(ncid, idlat, clat, (/xoffset, yoffset/), (/nlon+1, nlat+1/))
+    call ncerror(status, 'reading XLAT_C')
+else
+    if (xoffset < 2 .or. yoffset < 2) then
+        print *, "ERROR: no XLONG_C/XLAT_C in the geo_em file and xoffset/yoffset < 2: cannot compute cell corners"
+        stop 96
+    end if
+    allocate(mlon(nlon+2,nlat+2), mlat(nlon+2,nlat+2))
+    status = nf90_inq_varid(ncid, 'XLONG_M', idlon)
+    status = nf90_get_var(ncid, idlon, mlon, (/xoffset-1, yoffset-1/), (/nlon+2, nlat+2/))
+    call ncerror(status, 'reading XLONG_M for the cell corners')
+    status = nf90_inq_varid(ncid, 'XLAT_M', idlat)
+    status = nf90_get_var(ncid, idlat, mlat, (/xoffset-1, yoffset-1/), (/nlon+2, nlat+2/))
+    call ncerror(status, 'reading XLAT_M for the cell corners')
+    do j = 1, nlat+1
+        do i = 1, nlon+1
+            clon(i,j) = 0.25*(mlon(i,j) + mlon(i+1,j) + mlon(i,j+1) + mlon(i+1,j+1))
+            clat(i,j) = 0.25*(mlat(i,j) + mlat(i+1,j) + mlat(i,j+1) + mlat(i+1,j+1))
+        end do
+    end do
+    deallocate(mlon, mlat)
+end if
+
+! 4 corners per cell, counterclockwise: SW, SE, NE, NW
+allocate(vlon(4,nlon,nlat), vlat(4,nlon,nlat))
+do j = 1, nlat
+    do i = 1, nlon
+        vlon(:,i,j) = dble((/ clon(i,j), clon(i+1,j), clon(i+1,j+1), clon(i,j+1) /))
+        vlat(:,i,j) = dble((/ clat(i,j), clat(i+1,j), clat(i+1,j+1), clat(i,j+1) /))
+    end do
+end do
+deallocate(clon, clat)
+end subroutine read_corners
 !
 !-----------------------------------------------------------------------
 !
@@ -210,10 +265,12 @@ end subroutine ncerror
 !   lambert_conformal_conic:    1-D x/y (m)         + truelat1/2, stand_lon, cen_lat
 ! Both write 2-D lon/lat and a grid-mapping variable named after the projection.
 !
-subroutine def_horizontal_dims(ncid, XDimID, YDimID)
+subroutine def_horizontal_dims(ncid, XDimID, YDimID, BDimID, VDimID)
 use netcdf
 integer, intent(in)  :: ncid
-integer, intent(out) :: XDimID, YDimID
+integer, intent(out) :: XDimID, YDimID, BDimID, VDimID
+status = nf90_def_dim(ncid, "bnds", 2, BDimID)
+status = nf90_def_dim(ncid, "vertices", 4, VDimID)
 if (trim(projection) == 'lambert_conformal_conic') then
     status = nf90_def_dim(ncid, "x", nlon, XDimID)
     status = nf90_def_dim(ncid, "y", nlat, YDimID)
@@ -224,9 +281,10 @@ end if
 call handle_err(status)
 end subroutine def_horizontal_dims
 
-subroutine def_horizontal_vars(ncid, XDimID, YDimID, LonVarID, LatVarID, XVarID, YVarID, gmVarID)
+subroutine def_horizontal_vars(ncid, XDimID, YDimID, BDimID, VDimID, LonVarID, LatVarID, XVarID, YVarID, gmVarID)
 use netcdf
-integer, intent(in)  :: ncid, XDimID, YDimID
+integer, intent(in)  :: ncid, XDimID, YDimID, BDimID, VDimID
+character(len=4) :: xn, yn
 integer, intent(out) :: LonVarID, LatVarID, XVarID, YVarID, gmVarID
 
 status = nf90_def_var(ncid, "lon", nf90_double, (/ XDimID, YDimID /), LonVarID)
@@ -239,6 +297,13 @@ status = nf90_put_att(ncid, LatVarID, "long_name","latitude")
 status = nf90_put_att(ncid, LatVarID, "standard_name","latitude")
 status = nf90_put_att(ncid, LatVarID, "units","degrees_north")
 status = nf90_put_att(ncid, LatVarID, "_CoordinateAxisType","Lat")
+status = nf90_put_att(ncid, LonVarID, "bounds","vertices_lon")
+status = nf90_put_att(ncid, LatVarID, "bounds","vertices_lat")
+call handle_err(status)
+
+! cell corners of lon/lat: vertices_lon/lat(vertices, x, y) in Fortran order
+status = nf90_def_var(ncid, "vertices_lon", nf90_double, (/ VDimID, XDimID, YDimID /), vlonID)
+status = nf90_def_var(ncid, "vertices_lat", nf90_double, (/ VDimID, XDimID, YDimID /), vlatID)
 call handle_err(status)
 
 status = nf90_def_var(ncid, trim(projection), nf90_char, gmVarID)
@@ -280,6 +345,18 @@ else
 end if
 status = nf90_put_att(ncid, gmVarID, "earth_radius", earth_radius)
 call handle_err(status)
+
+! bounds of the 1-D axes: rlon_bnds/rlat_bnds or x_bnds/y_bnds
+if (trim(projection) == 'lambert_conformal_conic') then
+    xn = 'x'; yn = 'y'
+else
+    xn = 'rlon'; yn = 'rlat'
+end if
+status = nf90_put_att(ncid, XVarID, "bounds", trim(xn)//'_bnds')
+status = nf90_put_att(ncid, YVarID, "bounds", trim(yn)//'_bnds')
+status = nf90_def_var(ncid, trim(xn)//'_bnds', nf90_double, (/ BDimID, XDimID /), xbndID)
+status = nf90_def_var(ncid, trim(yn)//'_bnds', nf90_double, (/ BDimID, YDimID /), ybndID)
+call handle_err(status)
 end subroutine def_horizontal_vars
 
 subroutine put_horizontal_vars(ncid, LonVarID, LatVarID, XVarID, YVarID)
@@ -293,16 +370,36 @@ status = nf90_put_var(ncid, LatVarID, lat)
 call handle_err(status)
 if (trim(projection) == 'lambert_conformal_conic') then
     call lambert_xy(xc, yc)
-    status = nf90_put_var(ncid, XVarID, xc)
-    call handle_err(status)
-    status = nf90_put_var(ncid, YVarID, yc)
 else
-    status = nf90_put_var(ncid, XVarID, rlon)
-    call handle_err(status)
-    status = nf90_put_var(ncid, YVarID, rlat)
+    xc = dble(rlon); yc = dble(rlat)
 end if
+status = nf90_put_var(ncid, XVarID, xc)
+call handle_err(status)
+status = nf90_put_var(ncid, YVarID, yc)
+call handle_err(status)
+status = nf90_put_var(ncid, xbndID, axis_bounds(xc, nlon))
+call handle_err(status)
+status = nf90_put_var(ncid, ybndID, axis_bounds(yc, nlat))
+call handle_err(status)
+status = nf90_put_var(ncid, vlonID, vlon)
+call handle_err(status)
+status = nf90_put_var(ncid, vlatID, vlat)
 call handle_err(status)
 end subroutine put_horizontal_vars
+
+! bounds of a regular 1-D axis: half-way to the neighbours (edges extrapolated)
+function axis_bounds(c, n) result(b)
+integer, intent(in) :: n
+real(kind=8), intent(in) :: c(n)
+real(kind=8) :: b(2,n)
+integer :: k
+do k = 2, n
+    b(1,k) = 0.5d0*(c(k-1) + c(k))
+    b(2,k-1) = b(1,k)
+end do
+b(1,1) = c(1) - (b(2,1) - c(1))
+b(2,n) = c(n) + (c(n) - b(1,n))
+end function axis_bounds
 
 ! x/y (m) of the grid columns/rows: lon/lat of the middle row/column projected
 ! with the Lambert conformal conic formulas (sphere of radius earth_radius).
@@ -340,7 +437,7 @@ subroutine write_netcdf_2D(uvar)
 use netcdf
 use datvar_s
 !
-integer :: LatDimID,LonDimID,rlonDimID,rlatDimID,HDimID,BDimID,HeDimID
+integer :: LatDimID,LonDimID,rlonDimID,rlatDimID,HDimID,BDimID,HeDimID,VDimID,TypeDimID,TypeVarID
 integer :: LonVarID,LatVarID,TBVarID,TVarID,rlatVarId,rlonVarID,uVarID,HVarID,rpVarID
 real, dimension(nlon,nlat) :: uvar
 real, parameter :: FillValue=1.e+20
@@ -348,9 +445,25 @@ real, parameter :: FillValue=1.e+20
 status = nf90_create(fnameout, IOR(IOR(nf90_noclobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
-call def_horizontal_dims(ncid, LonDimID, LatDimID)
+call def_horizontal_dims(ncid, LonDimID, LatDimID, BDimID, VDimID)
 
-call def_horizontal_vars(ncid, LonDimID, LatDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
+call def_horizontal_vars(ncid, LonDimID, LatDimID, BDimID, VDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
+
+! sftlaf/sfturf: scalar coordinate "type" (area_type from the header)
+if (len_trim(area_type) > 0) then
+    status = nf90_def_dim(ncid, "strlen", len_trim(area_type), TypeDimID)
+    status = nf90_def_var(ncid, "type", nf90_char, (/ TypeDimID /), TypeVarID)
+    status = nf90_put_att(ncid, TypeVarID, "standard_name", "area_type")
+    select case (trim(area_type))
+    case ('lake_and_inland_sea')
+        status = nf90_put_att(ncid, TypeVarID, "long_name", "Lake and Inland Sea area type")
+    case ('urban')
+        status = nf90_put_att(ncid, TypeVarID, "long_name", "Urban area type")
+    case default
+        status = nf90_put_att(ncid, TypeVarID, "long_name", "area type")
+    end select
+    call handle_err(status)
+end if
 
 status = nf90_def_var(ncid, varname, nf90_float, &
                             (/ LonDimId, LatDimID /), uVarId)
@@ -367,8 +480,13 @@ call handle_err(status)
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
+if (trim(vunits) == 'K') status = nf90_put_att(ncid, uVarID, "units_metadata","temperature: on_scale")
 status = nf90_put_att(ncid, uVarID, "grid_mapping",trim(projection))
-status = nf90_put_att(ncid, uVarID, "coordinates","lat lon")
+if (len_trim(area_type) > 0) then
+    status = nf90_put_att(ncid, uVarID, "coordinates","lat lon type")
+else
+    status = nf90_put_att(ncid, uVarID, "coordinates","lat lon")
+end if
 status = nf90_put_att(ncid, uVarID, "cell_methods",cellmethods)
 status = nf90_put_att(ncid, uVarID, "cell_measures","area: areacella")
 status = nf90_put_att(ncid, uVarID, "_FillValue",huge_val)
@@ -380,6 +498,10 @@ call write_global_attributes
 status = nf90_enddef(ncid)
 
 call put_horizontal_vars(ncid, LonVarID, LatVarID, rlonVarID, rlatVarID)
+if (len_trim(area_type) > 0) then
+    status = nf90_put_var(ncid, TypeVarID, trim(area_type))
+    call handle_err(status)
+end if
 call handle_err(status)
 status = nf90_put_var(ncid, uVarId, uvar )
 call handle_err(status)
@@ -396,7 +518,7 @@ subroutine write_netcdf_rtime_3d(uvar,mtime,utime,btime)
 use netcdf
 use datvar_s
 !
-integer :: LatDimID,LonDimID,BDimID,HDimID
+integer :: LatDimID,LonDimID,BDimID,HDimID,VDimID
 integer :: LonVarID,LatVarID,TBVarID,TVarID,rlatVarId,rlonVarID,uVarID,rpVarID
 integer :: HVarID
 integer :: mtime
@@ -419,14 +541,13 @@ point = index(cellmethods, 'time: point') > 0
 status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
-call def_horizontal_dims(ncid, LonDimID, LatDimID)
-if (.not. point) status = nf90_def_dim(ncid, "bnds", 2, BDimID)
+call def_horizontal_dims(ncid, LonDimID, LatDimID, BDimID, VDimID)
 status = nf90_def_dim(ncid, "time", nf90_unlimited, HDimID)
 
 status = nf90_def_var(ncid, "time", nf90_double, (/ HDimID /), TVarId)
 if (.not. point) status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
 
-call def_horizontal_vars(ncid, LonDimID, LatDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
+call def_horizontal_vars(ncid, LonDimID, LatDimID, BDimID, VDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
 
 ! Check for optional Z coordinate conditions
 if (height(1) > 0.0) then
@@ -450,12 +571,14 @@ status = nf90_put_att(ncid, TVarID, "standard_name","time")
 status = nf90_put_att(ncid, TVarID, "long_name","time")
 if (.not. point) status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
 status = nf90_put_att(ncid, TVarID, "units",trim(day_units))
-status = nf90_put_att(ncid, TVarID, "calendar","standard")
+status = nf90_put_att(ncid, TVarID, "calendar","proleptic_gregorian")
+status = nf90_put_att(ncid, TVarID, "units_metadata","leap_seconds: none")
 status = nf90_put_att(ncid, TVarID, "axis","T")
 
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
+if (trim(vunits) == 'K') status = nf90_put_att(ncid, uVarID, "units_metadata","temperature: on_scale")
 status = nf90_put_att(ncid, uVarID, "grid_mapping",trim(projection))
 
 ! Dynamically update coordinates attribute string matching configuration state
@@ -474,7 +597,7 @@ status = nf90_put_att(ncid, uVarID, "missing_value",huge_val)
 
 ! Set attributes on the dynamic variable layer if it was initialized
 if (height(1) > 0.0) then
-    status = nf90_put_att(ncid, HVarID, "long_name","height above the surface")
+    status = nf90_put_att(ncid, HVarID, "long_name","height")
     status = nf90_put_att(ncid, HVarID, "standard_name","height")
     status = nf90_put_att(ncid, HVarID, "positive","up")
     status = nf90_put_att(ncid, HVarID, "axis","Z")
@@ -525,7 +648,7 @@ subroutine write_netcdf_rtime_soil(uvar,mtime,utime,btime)
 use netcdf
 use datvar_s
 !
-integer :: LatDimID,LonDimID,BDimID,HDimID,depth_dimid,SVarId,SBVarId
+integer :: LatDimID,LonDimID,BDimID,HDimID,VDimID,depth_dimid,SVarId,SBVarId
 integer :: LonVarID,LatVarID,TBVarID,TVarID,rlatVarId,rlonVarID,uVarID,rpVarID
 integer :: mtime
 integer, dimension(2,mtime) :: btime
@@ -547,18 +670,17 @@ point = index(cellmethods, 'time: point') > 0
 status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
-call def_horizontal_dims(ncid, LonDimID, LatDimID)
-status = nf90_def_dim(ncid, "nsoil", nsoil, depth_dimid)
-status = nf90_def_dim(ncid, "bnds", 2, BDimID)
+call def_horizontal_dims(ncid, LonDimID, LatDimID, BDimID, VDimID)
+status = nf90_def_dim(ncid, "depth", nsoil, depth_dimid)
 status = nf90_def_dim(ncid, "time", nf90_unlimited, HDimID)
 
 status = nf90_def_var(ncid, "time", nf90_double, (/ HDimID /), TVarId)
 if (.not. point) status = nf90_def_var(ncid, "time_bnds", nf90_double, (/ BDimID, HDimID /), TBVarId)
 
-call def_horizontal_vars(ncid, LonDimID, LatDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
+call def_horizontal_vars(ncid, LonDimID, LatDimID, BDimID, VDimID, LonVarID, LatVarID, rlonVarID, rlatVarID, rpVarID)
 
-status = nf90_def_var(ncid, "sdepth", nf90_double, (/ depth_dimid /), SVarId)
-status = nf90_def_var(ncid, "sdepth_bnds", nf90_double, (/ BDimID, depth_dimid /), SBVarId)
+status = nf90_def_var(ncid, "depth", nf90_double, (/ depth_dimid /), SVarId)
+status = nf90_def_var(ncid, "depth_bnds", nf90_double, (/ BDimID, depth_dimid /), SBVarId)
 
 status = nf90_def_var(ncid, varname, nf90_float, (/ LonDimId, LatDimID, depth_dimid, HDimID /), uVarId)
 call handle_err(status)
@@ -575,12 +697,13 @@ status = nf90_put_att(ncid, TVarID, "standard_name","time")
 status = nf90_put_att(ncid, TVarID, "long_name","time")
 if (.not. point) status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
 status = nf90_put_att(ncid, TVarID, "units",trim(day_units))
-status = nf90_put_att(ncid, TVarID, "calendar","standard")
+status = nf90_put_att(ncid, TVarID, "calendar","proleptic_gregorian")
+status = nf90_put_att(ncid, TVarID, "units_metadata","leap_seconds: none")
 status = nf90_put_att(ncid, TVarID, "axis","T")
 
 status = nf90_put_att(ncid, SVarId, "standard_name", "depth")
-status = nf90_put_att(ncid, SVarId, "long_name", "Soil layer depth")
-status = nf90_put_att(ncid, SVarId, "bounds", "sdepth_bnds")
+status = nf90_put_att(ncid, SVarId, "long_name", "depth")
+status = nf90_put_att(ncid, SVarId, "bounds", "depth_bnds")
 status = nf90_put_att(ncid, SVarId, "units", "m")
 status = nf90_put_att(ncid, SVarId, "positive", "down")
 status = nf90_put_att(ncid, SVarId, "axis", "Z")
@@ -589,6 +712,7 @@ status = nf90_put_att(ncid, SVarId, "axis", "Z")
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
+if (trim(vunits) == 'K') status = nf90_put_att(ncid, uVarID, "units_metadata","temperature: on_scale")
 status = nf90_put_att(ncid, uVarID, "grid_mapping",trim(projection))
 status = nf90_put_att(ncid, uVarID, "coordinates","lat lon time")
 status = nf90_put_att(ncid, uVarID, "cell_methods",cellmethods)

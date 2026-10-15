@@ -45,6 +45,8 @@ real, dimension(1) :: height, pressure
 real, dimension(2) :: pressure_bounds
 real, dimension(:),   allocatable :: rlon, rlat
 real, dimension(:,:), allocatable :: lon, lat, tlon, tlat, cosalp, sinalp, landmask
+! cell corners (4 per cell, counterclockwise), from the geo_em corner points
+real(kind=8), dimension(:,:,:), allocatable :: vlon, vlat
 
 ! --- Map projection of the output grid (set per grid in &cordex_config) ---
 ! projection: CF grid_mapping_name, 'rotated_latitude_longitude' or
@@ -53,6 +55,9 @@ character(len=40) :: projection
 real :: pole_lat, pole_lon                     ! rotated pole (grid_north_pole_*)
 real :: truelat1, truelat2, stand_lon, cen_lat ! Lambert (standard parallels, central meridian, origin)
 real :: false_easting, false_northing          ! Lambert, metres
+
+! Scalar area-type coordinate for sftlaf/sfturf (set in their header)
+character(len=40) :: area_type
 
 real, dimension(4), parameter :: sdepth = [0.1, 0.3, 0.6, 1.0]
 real, dimension(2,4) :: sdepth_bounds
@@ -149,7 +154,7 @@ namelist /cordex_config/ &
     wrfvar, vaid, height, pres, vunits, vunts, &
     lname, stname, cmethods, factor, &
     projection, pole_lat, pole_lon, truelat1, truelat2, stand_lon, cen_lat, &
-    false_easting, false_northing
+    false_easting, false_northing, area_type
 
 namelist /global_metadata/ &
     conventions, activity_id, contact, cordex_domain, domain_name, &
