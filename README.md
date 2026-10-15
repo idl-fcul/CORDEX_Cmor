@@ -118,6 +118,22 @@ Then submit the varset for its first year, with the last year as
 ./submit.sh run_out_generic.sh 20010101 20011231 2005 soil
 ```
 
+Or process all the years **in one job**: give the end year as `dateend`
+and set `year_lim` to that same end year, so the job doesn't resubmit
+itself afterwards:
+
+```bash
+# soil, 2001 to 2005, all in one job (~5h per year)
+./submit.sh --time=32:00:00 run_out_generic.sh 20010101 20051231 2005 soil
+```
+
+The `TIME[]` limits in `config/varsets.sh` are for **one** year, so give
+the job a longer `--time` yourself (about the number of years × the
+one-year time, plus a margin), within the queue's maximum walltime — split
+long periods into a few jobs. If `year_lim` is later than `dateend`, the
+job resubmits itself for the next block of the same length (2006–2010
+here, cut off at `year_lim`).
+
 `run_analysis.sh` works with `varsets_single.sh` too, but its `ORDER` is
 empty by default: each entry starts its own loop and they all run at
 once, so uncomment one of the two batches in the file (10 varsets each,
@@ -468,10 +484,14 @@ full round-trip, not per hop.
 
 `year_lim` decides when a stream stops:
 
-- the **advancing** link only resubmits if `yeari < year_lim`, so it runs
-  `year_lim` once and then stops instead of starting `year_lim + 1`;
-- the **other** links resubmit while `yeari <= year_lim`, so they always
-  run `year_lim` too — the advancing link is the one that ends the stream.
+- the **advancing** link only resubmits if the last year it processed
+  (`yearf`, from `dateend`) is before `year_lim`, so it runs `year_lim`
+  once and then stops instead of starting `year_lim + 1`. It resubmits for
+  the next block of the same length (one year for normal jobs), cut off at
+  `year_lim`;
+- the **other** links resubmit while their first year (`yeari`, from
+  `datebeg`) is `<= year_lim`, with the same dates, so they always run
+  `year_lim` too — the advancing link is the one that ends the stream.
 
 To rebalance (e.g. after run times change), run `report_walltimes.sh` and
 move variables between varsets: every program runs once per variable or

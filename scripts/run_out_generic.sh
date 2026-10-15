@@ -133,7 +133,7 @@ fi
 next="${NEXT[$VARSET]}"
 if [ "${ADVANCE_YEAR[$VARSET]:-0}" = "1" ]; then
   chain_ok=0
-  [ "$yeari" -lt "$year_lim" ] && chain_ok=1
+  [ "$yearf" -lt "$year_lim" ] && chain_ok=1
 else
   chain_ok=0
   [ "$yeari" -le "$year_lim" ] && chain_ok=1
@@ -142,9 +142,11 @@ fi
 if [ -n "${next}" ] && [ "$chain_ok" = "1" ]; then
   next_datebeg="${datebeg}"
   next_dateend="${dateend}"
+  # Advancing link: next block of the same length, after this one, up to year_lim
   if [ "${ADVANCE_YEAR[$VARSET]:-0}" = "1" ]; then
-    next_datebeg=$(( yeari + 1 ))
-    next_dateend=$(( yearf + 1 ))
+    next_datebeg=$(( yearf + 1 ))
+    next_dateend=$(( yearf + 1 + yearf - yeari ))
+    [ "$next_dateend" -gt "$year_lim" ] && next_dateend="$year_lim"
   fi
   ${REPO_DIR}/submit.sh "run_out_generic.sh" "${next_datebeg}" "${next_dateend}" "${year_lim}" "${next}"
 fi
