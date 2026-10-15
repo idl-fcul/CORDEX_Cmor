@@ -172,7 +172,7 @@ integer :: LonVarID,LatVarID,TBVarID,TVarID,rlatVarId,rlonVarID,uVarID,HVarID,rp
 real, dimension(nlon,nlat) :: uvar
 real, parameter :: FillValue=1.e+20
 
-status = nf90_create(fnameout, IOR(nf90_noclobber, nf90_netcdf4), ncid)
+status = nf90_create(fnameout, IOR(IOR(nf90_noclobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
 status = nf90_def_dim(ncid, "rlon", nlon, LonDimID)
@@ -186,7 +186,7 @@ status = nf90_def_var(ncid, "rlon", nf90_double, &
                             (/ LonDimId /), rlonVarId)
 status = nf90_def_var(ncid, "rlat", nf90_double, &
                             (/ LatDimID /), rlatVarId)
-status = nf90_def_var(ncid, "rotted_pole", nf90_char,rpVarId)
+status = nf90_def_var(ncid, "rotated_latitude_longitude", nf90_char,rpVarId)
 
 status = nf90_def_var(ncid, varname, nf90_float, &
                             (/ LonDimId, LatDimID /), uVarId)
@@ -203,7 +203,8 @@ call handle_err(status)
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
-status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_pole")
+status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_latitude_longitude")
+status = nf90_put_att(ncid, uVarID, "coordinates","lat lon")
 status = nf90_put_att(ncid, uVarID, "cell_methods",cellmethods)
 status = nf90_put_att(ncid, uVarID, "cell_measures","area: areacella")
 status = nf90_put_att(ncid, uVarID, "_FillValue",huge_val)
@@ -236,6 +237,7 @@ call handle_err(status)
 status = nf90_put_att(ncid, rpVarID, "grid_mapping_name","rotated_latitude_longitude")
 status = nf90_put_att(ncid, rpVarID, "grid_north_pole_latitude", 39.25 )
 status = nf90_put_att(ncid, rpVarID, "grid_north_pole_longitude", -162. )
+status = nf90_put_att(ncid, rpVarID, "earth_radius", earth_radius )
 call handle_err(status)
 
 call write_global_attributes
@@ -272,8 +274,16 @@ integer :: mtime
 integer, dimension(2,mtime) :: btime
 real, dimension(mtime) :: utime
 real, dimension(nlon,nlat,mtime) :: uvar
+character(len=40) :: day_units
+real(kind=8) :: tfac
 
-status = nf90_create(fnameout, IOR(nf90_clobber, nf90_netcdf4), ncid)
+! Time axis in days since <iniyear>-01-01T00:00:00Z: values that the
+! programs count in hours are divided by 24 (tfac), daily ones are kept.
+day_units = 'days since '//ayearini//'-01-01T00:00:00Z'
+tfac = 1.d0
+if (timeunits(1:5) == 'hours') tfac = 24.d0
+
+status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
 status = nf90_def_dim(ncid, "rlon", nlon, LonDimID)
@@ -288,7 +298,7 @@ status = nf90_def_var(ncid, "lon", nf90_double, (/ LonDimId, LatDimID /), LonVar
 status = nf90_def_var(ncid, "lat", nf90_double, (/ LonDimId, LatDimID /), LatVarId)
 status = nf90_def_var(ncid, "rlon", nf90_double, (/ LonDimId /), rlonVarId)
 status = nf90_def_var(ncid, "rlat", nf90_double, (/ LatDimID /), rlatVarId)
-status = nf90_def_var(ncid, "rotated_pole", nf90_char,rpVarId)
+status = nf90_def_var(ncid, "rotated_latitude_longitude", nf90_char,rpVarId)
 
 ! Check for optional Z coordinate conditions
 if (height(1) > 0.0) then
@@ -311,18 +321,14 @@ call handle_err(status)
 status = nf90_put_att(ncid, TVarID, "standard_name","time")
 status = nf90_put_att(ncid, TVarID, "long_name","time")
 status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
-status = nf90_put_att(ncid, TVarID, "units",timeunits)
-status = nf90_put_att(ncid, TVarID, "calender","standard")
+status = nf90_put_att(ncid, TVarID, "units",trim(day_units))
+status = nf90_put_att(ncid, TVarID, "calendar","standard")
 status = nf90_put_att(ncid, TVarID, "axis","T")
-
-status = nf90_put_att(ncid, TBVarID, "long_name","time bounds")
-status = nf90_put_att(ncid, TBVarID, "units",timeunits)
-status = nf90_put_att(ncid, TBVarID, "calender","standard")
 
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
-status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_pole")
+status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_latitude_longitude")
 
 ! Dynamically update coordinates attribute string matching configuration state
 if (height(1) > 0.0) then
@@ -388,9 +394,9 @@ call write_global_attributes
 
 status = nf90_enddef(ncid)
 
-status = nf90_put_var(ncid, TVarId, utime )
+status = nf90_put_var(ncid, TVarId, dble(utime)/tfac )
 call handle_err(status)
-status = nf90_put_var(ncid, TBVarID, btime )
+status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
 call handle_err(status)
 status = nf90_put_var(ncid, LonVarId, lon )
 call handle_err(status)
@@ -431,8 +437,16 @@ integer :: mtime
 integer, dimension(2,mtime) :: btime
 real, dimension(mtime) :: utime
 real, dimension(nlon,nlat,nsoil,mtime) :: uvar
+character(len=40) :: day_units
+real(kind=8) :: tfac
 
-status = nf90_create(fnameout, IOR(nf90_clobber, nf90_netcdf4), ncid)
+! Time axis in days since <iniyear>-01-01T00:00:00Z: values that the
+! programs count in hours are divided by 24 (tfac), daily ones are kept.
+day_units = 'days since '//ayearini//'-01-01T00:00:00Z'
+tfac = 1.d0
+if (timeunits(1:5) == 'hours') tfac = 24.d0
+
+status = nf90_create(fnameout, IOR(IOR(nf90_clobber, nf90_netcdf4), nf90_classic_model), ncid)
 call handle_err(status)
 
 status = nf90_def_dim(ncid, "rlon", nlon, LonDimID)
@@ -448,10 +462,10 @@ status = nf90_def_var(ncid, "lon", nf90_double, (/ LonDimId, LatDimID /), LonVar
 status = nf90_def_var(ncid, "lat", nf90_double, (/ LonDimId, LatDimID /), LatVarId)
 status = nf90_def_var(ncid, "rlon", nf90_double, (/ LonDimId /), rlonVarId)
 status = nf90_def_var(ncid, "rlat", nf90_double, (/ LatDimID /), rlatVarId)
-status = nf90_def_var(ncid, "rotated_pole", nf90_char,rpVarId)
+status = nf90_def_var(ncid, "rotated_latitude_longitude", nf90_char,rpVarId)
 
-status = nf90_def_var(ncid, "sdepth", nf90_float, (/ depth_dimid /), SVarId)
-status = nf90_def_var(ncid, "sdepth_bnds", nf90_float, (/ BDimID, depth_dimid /), SBVarId)
+status = nf90_def_var(ncid, "sdepth", nf90_double, (/ depth_dimid /), SVarId)
+status = nf90_def_var(ncid, "sdepth_bnds", nf90_double, (/ BDimID, depth_dimid /), SBVarId)
 
 status = nf90_def_var(ncid, varname, nf90_float, (/ LonDimId, LatDimID, depth_dimid, HDimID /), uVarId)
 call handle_err(status)
@@ -467,13 +481,9 @@ call handle_err(status)
 status = nf90_put_att(ncid, TVarID, "standard_name","time")
 status = nf90_put_att(ncid, TVarID, "long_name","time")
 status = nf90_put_att(ncid, TVarID, "bounds","time_bnds")
-status = nf90_put_att(ncid, TVarID, "units",timeunits)
-status = nf90_put_att(ncid, TVarID, "calender","standard")
+status = nf90_put_att(ncid, TVarID, "units",trim(day_units))
+status = nf90_put_att(ncid, TVarID, "calendar","standard")
 status = nf90_put_att(ncid, TVarID, "axis","T")
-
-status = nf90_put_att(ncid, TBVarID, "long_name","time bounds")
-status = nf90_put_att(ncid, TBVarID, "units",timeunits)
-status = nf90_put_att(ncid, TBVarID, "calender","standard")
 
 status = nf90_put_att(ncid, SVarId, "standard_name", "depth")
 status = nf90_put_att(ncid, SVarId, "long_name", "Soil layer depth")
@@ -482,15 +492,11 @@ status = nf90_put_att(ncid, SVarId, "units", "m")
 status = nf90_put_att(ncid, SVarId, "positive", "down")
 status = nf90_put_att(ncid, SVarId, "axis", "Z")
 
-status = nf90_put_att(ncid, SBVarId, "long_name", "sdepth_bnds")
-status = nf90_put_att(ncid, SBVarId, "units", "m")
-status = nf90_put_att(ncid, SBVarId, "positive", "down")
-status = nf90_put_att(ncid, SBVarId, "axis", "Z")
 
 status = nf90_put_att(ncid, uVarID, "standard_name",standardname)
 status = nf90_put_att(ncid, uVarID, "long_name",longname)
 status = nf90_put_att(ncid, uVarID, "units",vunits)
-status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_pole")
+status = nf90_put_att(ncid, uVarID, "grid_mapping","rotated_latitude_longitude")
 status = nf90_put_att(ncid, uVarID, "coordinates","lat lon time")
 status = nf90_put_att(ncid, uVarID, "cell_methods",cellmethods)
 status = nf90_put_att(ncid, uVarID, "cell_measures","area: areacella")
@@ -532,9 +538,9 @@ call write_global_attributes
 
 status = nf90_enddef(ncid)
 
-status = nf90_put_var(ncid, TVarId, utime )
+status = nf90_put_var(ncid, TVarId, dble(utime)/tfac )
 call handle_err(status)
-status = nf90_put_var(ncid, TBVarID, btime )
+status = nf90_put_var(ncid, TBVarID, dble(btime)/tfac )
 call handle_err(status)
 status = nf90_put_var(ncid, LonVarId, lon )
 call handle_err(status)
