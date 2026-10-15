@@ -7,21 +7,31 @@
 
 set -uo pipefail
 
+#
 #--- Load config/varsets.sh -------------------------------------
+# Reads the active varsets file from the repo (this script's folder).
+#
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 REPO_DIR="${SCRIPT_DIR}"
 
 # shellcheck source=/dev/null
 source "${REPO_DIR}/config/varsets.sh"
 
+#
 #--- Counters ---------------------------------------------------
+# err/warn print a message and count it; errors set the exit status.
+#
 errors=0
 warnings=0
 
 err()  { echo "ERROR: $*" >&2; errors=$((errors + 1)); }
 warn() { echo "WARN:  $*" >&2; warnings=$((warnings + 1)); }
 
+#
 #--- 1. Processed varsets have a TIME[] entry -------------------
+# Every varset in ORDER or reached through NEXT needs a TIME entry,
+# since submit.sh uses it as --time.
+#
 declare -A processed=()
 for vs in "${ORDER[@]}"; do processed[$vs]=1; done
 for vs in "${!NEXT[@]}"; do processed["${NEXT[$vs]}"]=1; done
@@ -32,7 +42,10 @@ for vs in "${!VARSETS[@]}"; do
   fi
 done
 
+#
 #--- 2. NEXT[] entries name real varsets ------------------------
+# Each NEXT entry must belong to, and point to, an existing varset.
+#
 for vs in "${!NEXT[@]}"; do
   target="${NEXT[$vs]}"
   if [ -z "${VARSETS[$target]+x}" ]; then
@@ -43,7 +56,10 @@ for vs in "${!NEXT[@]}"; do
   fi
 done
 
+#
 #--- 3. CP_EXTRA[] entries name real varsets --------------------
+# Each CP_EXTRA companion must be an existing varset.
+#
 for vs in "${!CP_EXTRA[@]}"; do
   target="${CP_EXTRA[$vs]}"
   if [ -z "${VARSETS[$target]+x}" ]; then
@@ -51,7 +67,10 @@ for vs in "${!CP_EXTRA[@]}"; do
   fi
 done
 
+#
 #--- 4. ADVANCE_YEAR[]/CP_TIME[]/MEM[] keys are real varsets ----
+# Catches typos in the keys of these arrays.
+#
 for vs in "${!ADVANCE_YEAR[@]}"; do
   if [ -z "${VARSETS[$vs]+x}" ]; then
     err "ADVANCE_YEAR[$vs] is set but '$vs' is not in VARSETS[]."
@@ -68,14 +87,21 @@ for vs in "${!MEM[@]}"; do
   fi
 done
 
+#
 #--- 5. ORDER entries are real varsets --------------------------
+# Every varset run_analysis.sh would submit must exist.
+#
 for vs in "${ORDER[@]}"; do
   if [ -z "${VARSETS[$vs]+x}" ]; then
     err "ORDER contains '$vs', which is not in VARSETS[]."
   fi
 done
 
+#
 #--- 6. Every program has an .f90 file, every variable a header -
+# Each program name (after VAR substitution) needs f90_src/<name>.f90,
+# and each variable needs header/header_<var>.
+#
 for vs in "${!VARSETS[@]}"; do
   IFS=';' read -r -a groups <<< "${VARSETS[$vs]}"
   for group in "${groups[@]}"; do
@@ -95,14 +121,20 @@ for vs in "${!VARSETS[@]}"; do
   done
 done
 
+#
 #--- 7. Warning: varsets using DEFAULT_CP_TIME ------------------
+# Not an error: lists varsets that fall back to DEFAULT_CP_TIME.
+#
 for vs in "${!VARSETS[@]}"; do
   if [ -z "${CP_TIME[$vs]+x}" ]; then
     warn "VARSETS[$vs] has no CP_TIME[$vs] — archiving will use DEFAULT_CP_TIME=${DEFAULT_CP_TIME:-<unset>}."
   fi
 done
 
+#
 #--- Summary ----------------------------------------------------
+# Prints the totals; exit status 1 if any error was found.
+#
 echo
 echo "lint_varsets.sh: ${errors} error(s), ${warnings} warning(s)."
 [ "${errors}" -eq 0 ]

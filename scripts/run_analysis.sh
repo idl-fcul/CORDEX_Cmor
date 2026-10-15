@@ -7,11 +7,17 @@
 
 set -x
 
+#
 #--- Repo location (set by submit.sh) ---------------------------
+# ROOT_DIR comes from submit.sh; stops if this script was sent with plain sbatch.
+#
 : "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §0)}"
 REPO_DIR="${ROOT_DIR}"
 
+#
 #--- Modules ----------------------------------------------------
+# Modules for this short orchestration job.
+#
 intel_v="2021.4"
 hdf5_v="1.12.2"
 ncdf_v="4.9.3"
@@ -21,7 +27,10 @@ module load prgenv/intel intel/${intel_v} hpcx-openmpi netcdf4/${ncdf_v} hdf5/${
 
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${NETCDF4_DIR}/lib"
 
+#
 #--- Arguments --------------------------------------------------
+# datebeg, dateend (yyyymmdd) and year_lim (yyyy), passed on to every job.
+#
 date
 
 datebeg=$1
@@ -31,7 +40,10 @@ year_lim=$3
 echo "$datebeg"
 echo "$dateend"
 
+#
 #--- Varsets ----------------------------------------------------
+# Loads config/varsets.sh and stops if ORDER is empty.
+#
 source "${REPO_DIR}/config/varsets.sh"
 
 if [ "${#ORDER[@]}" -eq 0 ]; then
@@ -39,7 +51,11 @@ if [ "${#ORDER[@]}" -eq 0 ]; then
   exit 1
 fi
 
+#
 #--- Submit each ORDER entry, 120 s apart -----------------------
+# Submits run_out_generic.sh for each ORDER entry; submit.sh adds its
+# job name, time, memory and log files from config/varsets.sh.
+#
 for vs in "${ORDER[@]}"; do
   ${REPO_DIR}/submit.sh "run_out_generic.sh" "${datebeg}" "${dateend}" "${year_lim}" "${vs}"
   sleep 120

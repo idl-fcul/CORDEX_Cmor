@@ -7,11 +7,17 @@
 
 set -x
 
+#
 #--- Repo location (set by submit.sh) ---------------------------
+# ROOT_DIR comes from submit.sh; stops if this script was sent with plain sbatch.
+#
 : "${ROOT_DIR:?ROOT_DIR is not set — submit this script through submit.sh, not plain sbatch (see README.md §0)}"
 REPO_DIR="${ROOT_DIR}"
 
+#
 #--- Arguments --------------------------------------------------
+# datebeg dateend year_lim varset; stops if the varset is missing.
+#
 datebeg=$1
 dateend=$2
 year_lim=$3
@@ -22,7 +28,11 @@ if [ -z "${VARSET}" ]; then
   exit 1
 fi
 
+#
 #--- Environment: site, experiment, varsets ---------------------
+# Loads env.site.sh, the experiment (grids, output and archive paths)
+# and config/varsets.sh, then checks the varset exists.
+#
 source "${REPO_DIR}/env.site.sh"
 source "${REPO_DIR}/scripts/load_experiment.sh"
 source "${REPO_DIR}/config/varsets.sh"
@@ -33,13 +43,20 @@ if [ -z "${VARSETS[$VARSET]+x}" ]; then
   exit 1
 fi
 
+#
 #--- Modules for the archive step -------------------------------
+# CP_MODULES from env.site.sh; they can differ from the processing modules.
+#
 # shellcheck disable=SC2086
 module load ${CP_MODULES}
 
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${NETCDF4_DIR}/lib"
 
+#
 #--- Variable list (all groups of the varset) -------------------
+# All variables of the varset, from every group; they are the
+# prefixes of the output files (<var>_*.nc).
+#
 IFS=';' read -r -a groups <<< "${VARSETS[$VARSET]}"
 var=()
 for group in "${groups[@]}"; do
@@ -47,7 +64,10 @@ for group in "${groups[@]}"; do
   var+=("${group_vars[@]}")
 done
 
+#
 #--- Years ------------------------------------------------------
+# First and last year, from datebeg and dateend (printed for the log).
+#
 date
 
 echo "$datebeg"
@@ -58,7 +78,11 @@ echo "$yeari"
 yearf=$(echo "$dateend" | cut -c1-4)
 echo "$yearf"
 
+#
 #--- Archive, grid by grid (ECFS, then remote) ------------------
+# For each grid: copy every <var>_* file from its OUTPUT_DIR to ECFS,
+# then scp the <var>_*.nc files to REMOTE_HOST.
+#
 for grid in "${GRIDS[@]}"; do
   echo "Archiving grid ${grid}: ${OUTPUT_DIR[$grid]} -> ${ECFS_BASE[$grid]}, ${REMOTE_HOST}:${REMOTE_BASE[$grid]}"
   cd "${OUTPUT_DIR[$grid]}" || exit 1
