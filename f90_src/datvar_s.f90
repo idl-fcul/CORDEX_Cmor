@@ -46,6 +46,14 @@ real, dimension(2) :: pressure_bounds
 real, dimension(:),   allocatable :: rlon, rlat
 real, dimension(:,:), allocatable :: lon, lat, tlon, tlat, cosalp, sinalp, landmask
 
+! --- Map projection of the output grid (set per grid in &cordex_config) ---
+! projection: CF grid_mapping_name, 'rotated_latitude_longitude' or
+! 'lambert_conformal_conic'; it also names the grid-mapping variable.
+character(len=40) :: projection
+real :: pole_lat, pole_lon                     ! rotated pole (grid_north_pole_*)
+real :: truelat1, truelat2, stand_lon, cen_lat ! Lambert (standard parallels, central meridian, origin)
+real :: false_easting, false_northing          ! Lambert, metres
+
 real, dimension(4), parameter :: sdepth = [0.1, 0.3, 0.6, 1.0]
 real, dimension(2,4) :: sdepth_bounds
 
@@ -139,7 +147,9 @@ namelist /cordex_config/ &
     nz, nsoil, nlon, nlat, xoffset, yoffset, p_top, &
     dir, dir2, geog, wrffile, wrfile, dom, outdom, &
     wrfvar, vaid, height, pres, vunits, vunts, &
-    lname, stname, cmethods, factor
+    lname, stname, cmethods, factor, &
+    projection, pole_lat, pole_lon, truelat1, truelat2, stand_lon, cen_lat, &
+    false_easting, false_northing
 
 namelist /global_metadata/ &
     conventions, activity_id, contact, cordex_domain, domain_name, &
