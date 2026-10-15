@@ -580,9 +580,8 @@ subroutine write_global_attributes
     ! Creation time (UTC, YYYY-MM-DDThh:mm:ssZ), tracking_id and history
     call utc_timestamp(utc_now)
     call new_tracking_id(tracking)
-    history_str = trim(utc_now)//';rewrote data to be consistent with correct frequency '// &
-                  trim(frequency)//' for variable '//trim(varname)//' found in table CORDEX-CMIP6_'// &
-                  trim(frequency)//'.'
+    history_str = trim(utc_now)//';rewrote data to be consistent with '//trim(activity_id)// &
+                  ' for variable '//trim(varname)//' found in table CORDEX-CMIP6_'//trim(frequency)//'.'
 
     ! String Attributes
     status = nf90_put_att(ncid, nf90_global, "Conventions", trim(conventions))

@@ -128,7 +128,7 @@ work() {   # work <var> <tmp file> <monthly files>...
     step ncap2 -O -h -s 'sdepth_bnds=rint(1.0e6*double(sdepth_bnds))/1.0e6;sdepth=rint(5.0e5*(sdepth_bnds(:,0)+sdepth_bnds(:,1)))/1.0e6' "$f" "$f" || return 1
 
     now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    hist="${now};rewrote data to be consistent with correct frequency 6hr for variable ${var} found in table CORDEX-CMIP6_6hr."
+    hist="${now};rewrote data to be consistent with $(ini_val activity_id) for variable ${var} found in table CORDEX-CMIP6_6hr."
     step ncatted -O -h \
       -a "grid_mapping,${var},o,c,rotated_latitude_longitude" \
       -a earth_radius,rotated_latitude_longitude,o,f,6370000. \
