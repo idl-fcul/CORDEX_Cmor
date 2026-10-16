@@ -81,10 +81,13 @@ echo "$yearf"
 #
 #--- Archive, grid by grid (ECFS, then remote) ------------------
 # For each grid: copy this job's years of each variable to ECFS and scp them
-# to REMOTE_HOST; nothing is deleted, and any failure makes the job FAILED.
+# to REMOTE_HOST (retried, see COPY_ATTEMPTS); nothing is deleted, and any
+# failure makes the job FAILED.
 #
 shopt -s nullglob
 failed=0
+COPY_ATTEMPTS="${COPY_ATTEMPTS:-3}"   # scp attempts per variable (env.site.sh)
+COPY_WAIT="${COPY_WAIT:-300}"         # seconds between attempts (env.site.sh)
 for grid in "${GRIDS[@]}"; do
   echo "Archiving grid ${grid}, ${yeari}-${yearf}: ${OUTPUT_DIR[$grid]} -> ${ECFS_BASE[$grid]}, ${REMOTE_HOST}:${REMOTE_BASE[$grid]}"
   cd "${OUTPUT_DIR[$grid]}" || exit 1
@@ -108,8 +111,22 @@ for grid in "${GRIDS[@]}"; do
       && ecp -o "${files[@]}" "${ECFS_BASE[$grid]}/${var[$v]}/" \
       || { echo "ERROR: ECFS copy of ${var[$v]} (${grid}) failed" >&2; failed=1; }
     if [ "${#nc_files[@]}" -gt 0 ]; then
-      scp "${nc_files[@]}" "${REMOTE_HOST}:${REMOTE_BASE[$grid]}/${var[$v]}/raw" \
-        || { echo "ERROR: scp of ${var[$v]} (${grid}) failed" >&2; failed=1; }
+      # scp to REMOTE_HOST, retried up to COPY_ATTEMPTS times, COPY_WAIT seconds apart
+      copied=no
+      for (( attempt=1; attempt<=COPY_ATTEMPTS; attempt++ )); do
+        if scp "${nc_files[@]}" "${REMOTE_HOST}:${REMOTE_BASE[$grid]}/${var[$v]}/raw/"; then
+          copied=yes
+          break
+        fi
+        echo " [WARN] ${var[$v]} (${grid}): copy to ${REMOTE_HOST} failed (attempt ${attempt} of ${COPY_ATTEMPTS})" >&2
+        if [ "${attempt}" -lt "${COPY_ATTEMPTS}" ]; then
+          sleep "${COPY_WAIT}"
+        fi
+      done
+      if [ "${copied}" != yes ]; then
+        echo "ERROR: scp of ${var[$v]} (${grid}) failed after ${COPY_ATTEMPTS} attempts" >&2
+        failed=1
+      fi
     fi
   done
 done
