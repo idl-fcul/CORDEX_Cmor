@@ -145,13 +145,6 @@ for grid in "${GRIDS[@]}"; do
     while read -r size name; do local_size[$name]=$size; done \
       < <(find "$out" -maxdepth 1 -name '*.nc' -printf '%s %f\n')
   fi
-  # originals covering each year: local_cover[<var>:<year>]="name ..."
-  declare -A local_cover=()
-  for name in "${!local_size[@]}"; do
-    read -r nv y1 y2 <<< "$(name_years "$name")" || true
-    [ -n "${nv:-}" ] || continue
-    for ((y = y1; y <= y2; y++)); do local_cover[$nv:$y]+="$name "; done
-  done
 
   for dest in "${DESTS[@]}"; do
     rep="${REPORT_DIR:-${ROOT_RUN_DIR%/}/check_archive_${grid}}/${dest}"
@@ -201,12 +194,7 @@ for grid in "${GRIDS[@]}"; do
       for v in "${VARS[@]}"; do
         cov="${cover[$v:$year]:-}"
         if [ -z "$cov" ]; then
-          # where it was expected, and whether the original can still be archived
-          if [ "$dest" = remote ]; then expected="${where}/${v}/raw"; else expected="${where}/${v}"; fi
-          orig="${local_cover[$v:$year]:-}"
-          if [ -n "$orig" ]; then orig="original in OUTPUT_DIR: ${orig%% *} — resubmit the archive job"
-          else orig="no original in ${out} — extract it again"; fi
-          echo "$(varset_for "$v") $v  # not in ${expected}; ${orig}" >> "$missing_f"; nm=$((nm + 1)); continue
+          echo "$(varset_for "$v") $v" >> "$missing_f"; nm=$((nm + 1)); continue
         fi
         bad=""
         for name in $cov; do
@@ -229,7 +217,7 @@ for grid in "${GRIDS[@]}"; do
         if [ -z "$bad" ]; then
           echo "$v" >> "$found_f"; nf=$((nf + 1))
         else
-          echo "$(varset_for "$v") $v  # $bad (in ${where})" >> "$size_f"; ns=$((ns + 1))
+          echo "$(varset_for "$v") $v  # $bad" >> "$size_f"; ns=$((ns + 1))
         fi
       done
       for kind in found missing size_mismatch; do
@@ -244,7 +232,7 @@ for grid in "${GRIDS[@]}"; do
     echo "  reports: ${rep}"
     unset arch_size arch_files cover
   done
-  unset local_size local_cover
+  unset local_size
 done
 
 [ "$status" -eq 0 ] && echo "All archived copies are complete." \

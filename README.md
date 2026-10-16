@@ -718,8 +718,8 @@ Per grid and archive it writes to `${ROOT_RUN_DIR}/check_archive_<grid>/<remote|
 | File | Content |
 |---|---|
 | `found_<year>.txt` | variables archived correctly |
-| `missing_<year>.txt` | `<varset> <variable>  # not in <folder>; <original>` — the folder where the copy was expected (`host:REMOTE_BASE/<var>/raw` or `ECFS_BASE/<var>`) and whether the original is still in `OUTPUT_DIR` (then resubmit the archive job) or gone (then extract the variable again) |
-| `size_mismatch_<year>.txt` | `<varset> <variable>  # <file>: <sizes> (in <folder>)` — empty, truncated or suspicious copies |
+| `missing_<year>.txt` | `<varset> <variable>` with no archived file for that year |
+| `size_mismatch_<year>.txt` | `<varset> <variable>  # <file>: <sizes>` — empty, truncated or suspicious copies |
 | `problems_summary.txt` | every year with problems, and its missing and wrong-size lines |
 | `found_<year>.sh`, `missing_<year>.sh`, `size_mismatch_<year>.sh` | the same three lists as bash arrays, ready to `source`: `declare -a var=("hfls" "pr" )` |
 
