@@ -95,7 +95,7 @@ The slowest stream went from 28h06 per year (`plev_hus` → `wpth1`) to
 about 21h, roughly 25% faster per model year; total work is unchanged
 (~206h per year), just spread evenly. The `zlev_uava0/1` estimate is
 1.1 × `zlev_va0`, taken as its 19h limit since there's no measured run yet.
-Re-run `report_walltimes.sh` (main README §11) after the first full year
+Re-run `tools/report_walltimes.sh` (main README §11) after the first full year
 and rebalance if these, `out1` or `out2` differ much from the estimates.
 
 ## Time limits (`TIME[]`)

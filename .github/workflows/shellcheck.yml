@@ -30,12 +30,12 @@ jobs:
             config/varsets_single.sh \
             env.site.sh.example \
             submit.sh \
-            report_walltimes.sh \
-            merge_soil_monthly.sh \
-            check_and_found_var.sh \
-            check_archive.sh \
-            lint_varsets.sh
+            tools/report_walltimes.sh \
+            tools/merge_soil_monthly.sh \
+            tools/check_and_found_var.sh \
+            tools/check_archive.sh \
+            tools/lint_varsets.sh
 
       - name: Check config/varsets.sh (lint_varsets.sh)
         # Fails if a varset, NEXT/CP_EXTRA entry, program or header is missing.
-        run: bash lint_varsets.sh
+        run: bash tools/lint_varsets.sh

@@ -30,7 +30,7 @@ now 3 generic job scripts, submitted through `submit.sh` and driven by:
    `JOB_ACCOUNT`, `JOB_MAIL_USER`, `JOB_CHDIR`, and `EXPERIMENT` set to
    your experiment folder's name. Nothing to edit in `scripts/`.
 4. Check `config/varsets.sh` covers the variables you need (§5), and run
-   `bash lint_varsets.sh` (§11) after any change to it.
+   `bash tools/lint_varsets.sh` (§11) after any change to it.
 
 ### Standard submission
 
@@ -153,8 +153,8 @@ config/        <- varsets.sh: the active variables/programs/scheduling, the only
 scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they source; §6)
 .github/       <- ShellCheck run on GitHub
 submit.sh      <- submits every job (§6, §9)
-report_walltimes.sh, lint_varsets.sh, merge_soil_monthly.sh,
-check_and_found_var.sh, check_archive.sh + variables.txt  <- helper scripts (§11)
+tools/         <- helper scripts (§11): report_walltimes.sh, lint_varsets.sh, merge_soil_monthly.sh,
+                  check_and_found_var.sh, check_archive.sh + variables.txt
 env.site.sh.example  <- copy to env.site.sh and fill in (§4)
 LICENSE, README.md
 ```
@@ -599,6 +599,9 @@ If its jobs need more than the default 8G of memory, add a `MEM[]` entry
 
 ## 11. Helper scripts
 
+All in `tools/`; run them from the repository folder (`bash tools/<script>`)
+or through a symlink.
+
 ### `report_walltimes.sh` — longest run per varset
 
 Pulls real run times from Slurm's accounting (`sacct`) for the jobs this
@@ -610,7 +613,7 @@ Run it **directly on an HPC login node, not through `sbatch`** (it can be
 a symlink, e.g. in `$SCRATCH` — the config is found next to the real file):
 
 ```bash
-bash report_walltimes.sh --since 2026-08-01
+bash tools/report_walltimes.sh --since 2026-08-01
 ```
 
 | Option | Meaning | Default |
@@ -637,7 +640,7 @@ it is flagged rather than measured.
 A quick consistency check, no Slurm or compiler needed:
 
 ```bash
-bash lint_varsets.sh     # exit status 1 if any error
+bash tools/lint_varsets.sh     # exit status 1 if any error
 ```
 
 It reports an **error** if:
@@ -660,11 +663,11 @@ Checks the output folders for every variable in `variables.txt` (the 171
 CORDEX variables, fixed fields excluded; one per line, `#` comments
 allowed), without reading the extraction logs. Run it **directly on a
 login node** (it only lists files); it can be a symlink, e.g. in `$SCRATCH`
-— the repository, `env.site.sh` and `variables.txt` are found next to the
-real file:
+— `variables.txt` is found next to the real file, and the repository
+(`env.site.sh`, `config/`, `scripts/`) in the folder above `tools/`:
 
 ```bash
-ln -s $HPCPERM/CORDEX_Cmor/check_and_found_var.sh $SCRATCH/
+ln -s $HPCPERM/CORDEX_Cmor/tools/check_and_found_var.sh $SCRATCH/
 cd $SCRATCH
 ./check_and_found_var.sh 2015 2020                    # experiment from env.site.sh
 EXPERIMENT=lucas ./check_and_found_var.sh 2015 2020   # another experiment
@@ -687,7 +690,7 @@ Per grid it writes to `${ROOT_RUN_DIR}/check_<grid>/`:
 
 | Option | Meaning |
 |---|---|
-| `-v <file>` | another variable list (default: `variables.txt` next to the script) |
+| `-v <file>` | another variable list (default: `tools/variables.txt`) |
 | `-o <dir>` | another folder for the reports |
 | `-r <dir>` | the repository folder, if the script is kept elsewhere |
 
@@ -701,6 +704,8 @@ it takes everything from the experiment and `env.site.sh` (grids,
 and runs on a login node:
 
 ```bash
+ln -s $HPCPERM/CORDEX_Cmor/tools/check_archive.sh $SCRATCH/
+cd $SCRATCH
 ./check_archive.sh 2015 2020              # remote server
 ./check_archive.sh -d both 2015 2020      # remote server and ECFS
 EXPERIMENT=lucas ./check_archive.sh 2015 2020
@@ -743,7 +748,7 @@ that were already produced into yearly ones:
 
 ```bash
 module load nco
-bash merge_soil_monthly.sh -g experiments/cordex/cordex_global_EUR-12_d01.ini \
+bash tools/merge_soil_monthly.sh -g experiments/cordex/cordex_global_EUR-12_d01.ini \
      -r $SCRATCH/output_d01/orog_<...>_fx.nc \
      -o $SCRATCH/soil_yearly  $SCRATCH/output_d01
 ```

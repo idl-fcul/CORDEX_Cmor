@@ -12,7 +12,7 @@ set -uo pipefail
 # Reads the active varsets file from the repo (this script's folder).
 #
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-REPO_DIR="${SCRIPT_DIR}"
+REPO_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 # shellcheck source=/dev/null
 source "${REPO_DIR}/config/varsets.sh"
