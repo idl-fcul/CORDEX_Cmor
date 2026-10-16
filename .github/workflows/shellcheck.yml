@@ -33,6 +33,7 @@ jobs:
             report_walltimes.sh \
             merge_soil_monthly.sh \
             check_and_found_var.sh \
+            check_archive.sh \
             lint_varsets.sh
 
       - name: Check config/varsets.sh (lint_varsets.sh)
