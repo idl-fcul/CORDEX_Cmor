@@ -487,6 +487,13 @@ other variables, and ends as FAILED so you can see it and resubmit:
 ./submit.sh run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>
 ```
 
+The `scp` to `REMOTE_HOST` is retried: up to `COPY_ATTEMPTS` times per
+variable (default 3), `COPY_WAIT` seconds apart (default 300), both set in
+`env.site.sh`. Only a variable that fails every attempt counts as failed.
+If the server is down, each variable can wait
+`(COPY_ATTEMPTS-1) × COPY_WAIT` seconds before giving up, so for varsets
+with many variables keep `CP_TIME[]` long enough (or lower the two values).
+
 `plev_uava`, `zlev_uava0` and `zlev_uava1` list only their `va*`
 variables, but their programs also write the matching `ua*` files, so
 their archive step needs two jobs. `CP_EXTRA[]` in `config/varsets.sh`
