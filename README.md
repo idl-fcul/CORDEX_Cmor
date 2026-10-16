@@ -721,6 +721,7 @@ Per grid and archive it writes to `${ROOT_RUN_DIR}/check_archive_<grid>/<remote|
 | `missing_<year>.txt` | `<varset> <variable>` with no archived file for that year |
 | `size_mismatch_<year>.txt` | `<varset> <variable>  # <file>: <sizes>` — empty, truncated or suspicious copies |
 | `problems_summary.txt` | every year with problems, and its missing and wrong-size lines |
+| `found_<year>.sh`, `missing_<year>.sh`, `size_mismatch_<year>.sh` | the same three lists as bash arrays, ready to `source`: `declare -a var=("hfls" "pr" )` |
 
 To redo a varset's copy, resubmit its archive job:
 `./submit.sh run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>`.

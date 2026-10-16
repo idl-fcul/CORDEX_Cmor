@@ -103,6 +103,17 @@ for vs in $(printf '%s\n' "${!VARSETS[@]}" | sort); do
   done
 done
 varset_for() { echo "${varset_of[$1]:-${varset_any[$1]:-no_varset}}"; }
+
+# write_array <file> <list file>: the variables (last word of each line, before
+# any '#' note) as a bash array, sorted and unique, as check_output_v5.sh wrote:
+#   declare -a var=("pr" "tas" )
+write_array() {
+  {
+    printf 'declare -a var=('
+    sed -e 's/[[:space:]]*#.*//' "$2" | awk 'NF {print $NF}' | sort -u | while IFS= read -r v; do printf '"%s" ' "$v"; done
+    echo ')'
+  } > "$1"
+}
 echo "${#VARS[@]} variables, years ${START_YEAR}-${END_YEAR}, archive(s): ${DESTS[*]}"
 
 #
@@ -208,6 +219,9 @@ for grid in "${GRIDS[@]}"; do
         else
           echo "$(varset_for "$v") $v  # $bad" >> "$size_f"; ns=$((ns + 1))
         fi
+      done
+      for kind in found missing size_mismatch; do
+        write_array "$rep/${kind}_${year}.sh" "$rep/${kind}_${year}.txt"
       done
       echo "  ${year}: ${nf} copied correctly, ${nm} missing, ${ns} wrong size"
       { [ "$nm" -eq 0 ] && [ "$ns" -eq 0 ]; } || {
