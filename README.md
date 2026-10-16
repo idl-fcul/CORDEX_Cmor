@@ -154,7 +154,7 @@ scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they so
 .github/       <- ShellCheck run on GitHub
 submit.sh      <- submits every job (§6, §9)
 report_walltimes.sh, lint_varsets.sh, merge_soil_monthly.sh,
-check_and_found_var.sh + variables.txt  <- helper scripts (§11)
+check_and_found_var.sh, check_archive.sh + variables.txt  <- helper scripts (§11)
 env.site.sh.example  <- copy to env.site.sh and fill in (§4)
 LICENSE, README.md
 ```
@@ -690,6 +690,48 @@ Per grid it writes to `${ROOT_RUN_DIR}/check_<grid>/`:
 | `-v <file>` | another variable list (default: `variables.txt` next to the script) |
 | `-o <dir>` | another folder for the reports |
 | `-r <dir>` | the repository folder, if the script is kept elsewhere |
+
+### `check_archive.sh` — were the files archived correctly?
+
+Checks, per year, that every variable in `variables.txt` reached the
+archive intact: the remote server (`REMOTE_HOST:REMOTE_BASE/<var>/raw`,
+default) and/or ECFS (`ECFS_BASE/<var>`). Like `check_and_found_var.sh`,
+it takes everything from the experiment and `env.site.sh` (grids,
+`OUTPUT_DIR`, `REMOTE_BASE`, `ECFS_BASE`, `REMOTE_HOST`), can be a symlink,
+and runs on a login node:
+
+```bash
+./check_archive.sh 2015 2020              # remote server
+./check_archive.sh -d both 2015 2020      # remote server and ECFS
+EXPERIMENT=lucas ./check_archive.sh 2015 2020
+```
+
+The remote folder is listed with one `ssh` (as for `scp`, a key must let
+you in without a password); ECFS with `els`. A copy is correct when it has
+the same size as the original in `OUTPUT_DIR` (never deleted by the
+archive job). If the original is gone (e.g. purged from `$SCRATCH`), the
+copy must not be empty and must be within `-t` percent (default 5) of the
+previous year's copy.
+
+Per grid and archive it writes to `${ROOT_RUN_DIR}/check_archive_<grid>/<remote|ecfs>/`:
+
+| File | Content |
+|---|---|
+| `found_<year>.txt` | variables archived correctly |
+| `missing_<year>.txt` | `<varset> <variable>` with no archived file for that year |
+| `size_mismatch_<year>.txt` | `<varset> <variable>  # <file>: <sizes>` — empty, truncated or suspicious copies |
+| `problems_summary.txt` | every year with problems, and its missing and wrong-size lines |
+| `found_<year>.sh`, `missing_<year>.sh`, `size_mismatch_<year>.sh` | the same three lists as bash arrays, ready to `source`: `declare -a var=("hfls" "pr" )` |
+
+To redo a varset's copy, resubmit its archive job:
+`./submit.sh run_cp_generic.sh <datebeg> <dateend> <year_lim> <varset>`.
+The script exits with status 1 if anything is missing or wrong.
+
+| Option | Meaning |
+|---|---|
+| `-d remote\|ecfs\|both` | archive(s) to check (default `remote`) |
+| `-t <pct>` | size tolerance against the previous year when the original is gone (default 5) |
+| `-v <file>`, `-o <dir>`, `-r <dir>` | as for `check_and_found_var.sh` |
 
 ### `merge_soil_monthly.sh` — monthly soil files to one file per year
 
