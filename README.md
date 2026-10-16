@@ -153,7 +153,8 @@ config/        <- varsets.sh: the active variables/programs/scheduling, the only
 scripts/       <- the 3 generic job scripts (+ load_experiment.sh, which they source; §6)
 .github/       <- ShellCheck run on GitHub
 submit.sh      <- submits every job (§6, §9)
-report_walltimes.sh, lint_varsets.sh, merge_soil_monthly.sh  <- helper scripts (§11)
+report_walltimes.sh, lint_varsets.sh, merge_soil_monthly.sh,
+check_and_found_var.sh + variables.txt  <- helper scripts (§11)
 env.site.sh.example  <- copy to env.site.sh and fill in (§4)
 LICENSE, README.md
 ```
@@ -645,6 +646,43 @@ It reports an **error** if:
 
 and a **warning** for every varset without its own `CP_TIME[]` (it uses
 `DEFAULT_CP_TIME`).
+
+### `check_and_found_var.sh` — which variables were extracted, per year
+
+Checks the output folders for every variable in `variables.txt` (the 171
+CORDEX variables, fixed fields excluded; one per line, `#` comments
+allowed), without reading the extraction logs. Run it **directly on a
+login node** (it only lists files); it can be a symlink, e.g. in `$SCRATCH`
+— the repository, `env.site.sh` and `variables.txt` are found next to the
+real file:
+
+```bash
+ln -s $HPCPERM/CORDEX_Cmor/check_and_found_var.sh $SCRATCH/
+cd $SCRATCH
+./check_and_found_var.sh 2015 2020                    # experiment from env.site.sh
+EXPERIMENT=lucas ./check_and_found_var.sh 2015 2020   # another experiment
+```
+
+The output folders come from the experiment: `OUTPUT_DIR` of every grid in
+`run[]` (`experiments/<name>/<name>.sh`), each checked on its own. A
+variable counts as extracted for a year if any of its files covers that
+year — old and new file names, one or several years per file (the old
+daily names ending on 1 January of the next year count for their own year
+only); fx files are not checked.
+
+Per grid it writes to `${ROOT_RUN_DIR}/check_<grid>/`:
+
+| File | Content |
+|---|---|
+| `found_<year>.txt` | variables extracted for that year |
+| `missing_<year>.txt` | `<varset> <variable>` for every variable not extracted — the varset to resubmit, from `config/varsets.sh` (the running varsets, `ORDER` and their `NEXT` links, are preferred; several are comma-separated) |
+| `missing_summary.txt` | each missing variable with the years it is missing |
+
+| Option | Meaning |
+|---|---|
+| `-v <file>` | another variable list (default: `variables.txt` next to the script) |
+| `-o <dir>` | another folder for the reports |
+| `-r <dir>` | the repository folder, if the script is kept elsewhere |
 
 ### `merge_soil_monthly.sh` — monthly soil files to one file per year
 
