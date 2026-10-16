@@ -23,14 +23,14 @@ Usage: $0 [-d remote|ecfs|both] [-t pct] [-v <variables.txt>] [-o <report dir>] 
       original is no longer in OUTPUT_DIR (default: 5)
   -v  list of variables (default: variables.txt next to this script)
   -o  folder for the reports (default: <ROOT_RUN_DIR>/check_archive_<grid>)
-  -r  the CORDEX_Cmor folder (default: the folder this script is in)
+  -r  the CORDEX_Cmor folder (default: the folder above tools/)
 The experiment is EXPERIMENT from env.site.sh; set EXPERIMENT=<name> to check another.
 EOF
   exit 1
 }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")" && pwd)"
-REPO="$SCRIPT_DIR"; VARS_FILE="$SCRIPT_DIR/variables.txt"; REPORT_DIR=""
+REPO="$(cd -- "$SCRIPT_DIR/.." && pwd)"; VARS_FILE="$SCRIPT_DIR/variables.txt"; REPORT_DIR=""
 DEST="remote"; THRESHOLD=5
 while getopts "d:t:v:o:r:h" opt; do
   case "$opt" in

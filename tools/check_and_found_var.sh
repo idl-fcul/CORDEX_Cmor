@@ -12,13 +12,13 @@ set -euo pipefail
 
 #
 #--- Options ----------------------------------------------------
-# -r repository folder (default: this script's folder), -v variable list
+# -r repository folder (default: the folder above tools/), -v variable list
 # (default: variables.txt next to this script), -o where to write the reports.
 #
 usage() {
   cat >&2 <<EOF
 Usage: $0 [-r <repo dir>] [-v <variables.txt>] [-o <report dir>] <start_year> <end_year>
-  -r  the CORDEX_Cmor folder (default: the folder this script is in)
+  -r  the CORDEX_Cmor folder (default: the folder above tools/)
   -v  list of variables, one per line, '#' comments allowed
       (default: variables.txt next to this script)
   -o  folder for the reports (default: <ROOT_RUN_DIR>/check_<grid> of the experiment)
@@ -28,7 +28,7 @@ EOF
 }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")" && pwd)"
-REPO="$SCRIPT_DIR"; VARS_FILE="$SCRIPT_DIR/variables.txt"; REPORT_DIR=""
+REPO="$(cd -- "$SCRIPT_DIR/.." && pwd)"; VARS_FILE="$SCRIPT_DIR/variables.txt"; REPORT_DIR=""
 while getopts "r:v:o:h" opt; do
   case "$opt" in
     r) REPO="$OPTARG" ;;

@@ -49,7 +49,7 @@ fi
 # against TIME[]/CP_TIME[]; skipped if it isn't there.
 #
 SCRIPT_DIR="$(cd -- "$(dirname -- "$(realpath -- "${BASH_SOURCE[0]}")")" &>/dev/null && pwd)"
-config="${SCRIPT_DIR}/config/varsets.sh"
+config="${SCRIPT_DIR}/../config/varsets.sh"
 have_config=0
 if [ -f "${config}" ]; then
   # shellcheck source=/dev/null
